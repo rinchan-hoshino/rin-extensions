@@ -9,6 +9,7 @@ import {
   createCodexUsageExtension,
   credentialFromAccessToken,
   loadCodexUsage,
+  loadCodexUsageFromAccessToken,
   parseCodexUsageResponse,
   renderCodexUsage,
 } from "../extensions/codex-usage.ts";
@@ -83,6 +84,31 @@ test("parses the current Codex quota response without other providers", () => {
       credits: "17",
     },
   );
+});
+
+test("loads Codex quota directly for standalone extension consumers", async () => {
+  const status = await loadCodexUsageFromAccessToken(accessToken, (async (
+    _url,
+    init,
+  ) => {
+    assert.equal(
+      new Headers(init?.headers).get("ChatGPT-Account-Id"),
+      "acct-owner",
+    );
+    assert.equal(
+      new Headers(init?.headers).get("Authorization"),
+      `Bearer ${accessToken}`,
+    );
+    return new Response(
+      JSON.stringify({
+        rate_limit: { weekly: { percent_left: 64, reset_at: 1_900_000_000 } },
+      }),
+      { status: 200 },
+    );
+  }) as typeof fetch);
+  assert.equal(status.accountId, "acct-owner");
+  assert.equal(status.windows[0]?.name, "weekly");
+  assert.equal(status.windows[0]?.percentLeft, 64);
 });
 
 test("loads Codex quota through the extension model registry auth facade", async () => {

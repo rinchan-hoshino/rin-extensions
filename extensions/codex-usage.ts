@@ -167,15 +167,10 @@ export function parseCodexUsageResponse(
   };
 }
 
-export async function loadCodexUsage(
-  ctx: Pick<ExtensionCommandContext, "modelRegistry">,
+export async function loadCodexUsageFromAccessToken(
+  accessToken: string,
   fetchImpl: FetchLike = fetch,
 ): Promise<CodexUsageStatus> {
-  const resolved = await ctx.modelRegistry.getProviderAuth(CODEX_PROVIDER);
-  const accessToken = text(resolved?.auth.apiKey);
-  if (!accessToken) {
-    throw new Error("Codex usage unavailable: sign in to openai-codex first");
-  }
   const credential = credentialFromAccessToken(accessToken);
   const response = await fetchImpl(CODEX_USAGE_URL, {
     headers: {
@@ -194,6 +189,18 @@ export async function loadCodexUsage(
   }
   const data = await response.json();
   return parseCodexUsageResponse(data, credential);
+}
+
+export async function loadCodexUsage(
+  ctx: Pick<ExtensionCommandContext, "modelRegistry">,
+  fetchImpl: FetchLike = fetch,
+): Promise<CodexUsageStatus> {
+  const resolved = await ctx.modelRegistry.getProviderAuth(CODEX_PROVIDER);
+  const accessToken = text(resolved?.auth.apiKey);
+  if (!accessToken) {
+    throw new Error("Codex usage unavailable: sign in to openai-codex first");
+  }
+  return loadCodexUsageFromAccessToken(accessToken, fetchImpl);
 }
 
 function windowLabel(name: string): string {
