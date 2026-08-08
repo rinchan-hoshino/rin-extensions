@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import test from "node:test";
 
 import type {
@@ -13,6 +16,10 @@ import {
   parseCodexUsageResponse,
   renderCodexUsage,
 } from "../extensions/codex-usage.ts";
+import {
+  renderCodexUsageCardPng,
+  writeCodexUsageCard,
+} from "../extensions/codex-usage-card.ts";
 
 function jwt(payload: Record<string, unknown>): string {
   return `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;
@@ -149,7 +156,7 @@ test("loads Codex quota through the extension model registry auth facade", async
   );
 });
 
-test("renders a compact text report with no chart", () => {
+test("renders a compact text fallback without token history", () => {
   const output = renderCodexUsage({
     accountId: "acct-owner",
     accountName: "owner@example.com",
@@ -163,7 +170,39 @@ test("renders a compact text report with no chart", () => {
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
 });
 
-test("registers chat-capable /usage and reports success or failure through ui.notify", async () => {
+test("renders a standalone Codex-only PNG card", async () => {
+  const status = {
+    accountId: "acct-owner",
+    accountName: "owner@example.com",
+    plan: "pro",
+    windows: [
+      { name: "five_hour", percentLeft: 75 },
+      { name: "weekly", percentLeft: 42 },
+    ],
+    credits: "9",
+  };
+  const png = renderCodexUsageCardPng(status);
+  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
+  assert.equal(png.readUInt32BE(16), 1000);
+  assert.ok(png.readUInt32BE(20) >= 400);
+
+  const outputDir = await mkdtemp(path.join(os.tmpdir(), "codex-usage-card-"));
+  try {
+    const filePath = await writeCodexUsageCard(status, {
+      outputDir,
+      now: () => new Date("2026-08-09T00:00:00.000Z"),
+    });
+    assert.equal(path.dirname(filePath), outputDir);
+    assert.deepEqual(
+      [...(await readFile(filePath)).subarray(0, 8)],
+      [137, 80, 78, 71, 13, 10, 26, 10],
+    );
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
+});
+
+test("registers chat-capable /usage with rich image output and a native Pi text fallback", async () => {
   let command: any;
   const pi = {
     registerCommand(name: string, options: unknown) {
@@ -172,7 +211,13 @@ test("registers chat-capable /usage and reports success or failure through ui.no
     },
   } as unknown as ExtensionAPI;
   const notices: Array<[string, string]> = [];
+  const richResults: any[] = [];
+  const outputDir = await mkdtemp(
+    path.join(os.tmpdir(), "codex-usage-command-"),
+  );
   createCodexUsageExtension({
+    outputDir,
+    now: () => new Date("2026-08-09T00:00:00.000Z"),
     fetch: (async () =>
       new Response(
         JSON.stringify({ rate_limit: { weekly: { percent_left: 52 } } }),
@@ -188,15 +233,33 @@ test("registers chat-capable /usage and reports success or failure through ui.no
       notify(message: string, level: string) {
         notices.push([message, level]);
       },
+      rinCommandResult(result: unknown) {
+        richResults.push(result);
+      },
     },
   } as unknown as ExtensionCommandContext;
-  await command.handler("", ctx);
-  assert.match(notices[0]?.[0] || "", /weekly: 52% left/);
-  assert.equal(notices[0]?.[1], "info");
+  try {
+    await command.handler("", ctx);
+    assert.equal(notices.length, 0);
+    assert.match(richResults[0]?.fallbackText || "", /weekly: 52% left/);
+    assert.equal(richResults[0]?.parts?.[0]?.type, "image");
+    assert.deepEqual(
+      [...(await readFile(richResults[0].parts[0].path)).subarray(0, 8)],
+      [137, 80, 78, 71, 13, 10, 26, 10],
+    );
 
-  notices.length = 0;
-  ctx.modelRegistry.getProviderAuth = async () => undefined;
-  await command.handler("", ctx);
-  assert.match(notices[0]?.[0] || "", /sign in to openai-codex first/);
-  assert.equal(notices[0]?.[1], "error");
+    richResults.length = 0;
+    delete (ctx.ui as any).rinCommandResult;
+    await command.handler("", ctx);
+    assert.match(notices[0]?.[0] || "", /weekly: 52% left/);
+    assert.equal(notices[0]?.[1], "info");
+
+    notices.length = 0;
+    ctx.modelRegistry.getProviderAuth = async () => undefined;
+    await command.handler("", ctx);
+    assert.match(notices[0]?.[0] || "", /sign in to openai-codex first/);
+    assert.equal(notices[0]?.[1], "error");
+  } finally {
+    await rm(outputDir, { recursive: true, force: true });
+  }
 });

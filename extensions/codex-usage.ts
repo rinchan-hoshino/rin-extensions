@@ -4,6 +4,11 @@ import type {
   ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 
+import {
+  writeCodexUsageCard,
+  type CodexUsageCardOptions,
+} from "./codex-usage-card.js";
+
 const CODEX_PROVIDER = "openai-codex";
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
 
@@ -31,8 +36,16 @@ export type CodexUsageStatus = {
   credits?: string;
 };
 
-export type CodexUsageExtensionOptions = {
+export type CodexUsageExtensionOptions = CodexUsageCardOptions & {
   fetch?: FetchLike;
+};
+
+type RinExtensionCommandResultUi = ExtensionCommandContext["ui"] & {
+  rinCommandResult?: (result: {
+    text?: string;
+    fallbackText?: string;
+    parts?: Array<Record<string, unknown>>;
+  }) => void;
 };
 
 function record(value: unknown): Record<string, any> | undefined {
@@ -252,7 +265,23 @@ export function createCodexUsageExtension(
       handler: async (_args, ctx) => {
         try {
           const status = await loadCodexUsage(ctx, options.fetch);
-          ctx.ui.notify(renderCodexUsage(status), "info");
+          const fallbackText = renderCodexUsage(status);
+          const richUi = ctx.ui as RinExtensionCommandResultUi;
+          if (richUi.rinCommandResult) {
+            const imagePath = await writeCodexUsageCard(status, options);
+            richUi.rinCommandResult({
+              fallbackText,
+              parts: [
+                {
+                  type: "image",
+                  path: imagePath,
+                  mimeType: "image/png",
+                },
+              ],
+            });
+          } else {
+            ctx.ui.notify(fallbackText, "info");
+          }
         } catch (error) {
           const message =
             error instanceof Error

@@ -14,9 +14,9 @@ Both extensions are enabled by default. Run `/usage` after installation to verif
 
 ### `codex-usage`
 
-Registers `/usage` for TUI and Chat Bridge. It reads the refreshed `openai-codex` OAuth credential through Pi's model registry and reports only ChatGPT Codex quota windows, account, plan, and credits.
+Registers `/usage` for TUI and Chat Bridge. It reads the refreshed `openai-codex` OAuth credential through Pi's model registry and reports only ChatGPT Codex quota windows, account, plan, and credits. Chat receives a Codex-only PNG card; terminal frontends receive a text fallback.
 
-It does not collect token telemetry, query other providers, persist a usage database, or render charts.
+It does not collect token telemetry, query other providers, persist a usage database, or render token-history charts.
 
 ### `self-improve-reminder`
 
