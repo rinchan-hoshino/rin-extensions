@@ -8,6 +8,16 @@ import {
   writeCodexUsageCard,
   type CodexUsageCardOptions,
 } from "./codex-usage-card.js";
+import { registerCodexTelemetry } from "./codex-usage-telemetry.js";
+import { resolveAgentDir } from "./codex-usage-store.js";
+import {
+  buildUsageTrendSeries,
+  renderUsageTrendTextChart,
+} from "./codex-usage-trend.js";
+import {
+  parseCodexUsageReportArgs,
+  renderCodexUsageReport,
+} from "./codex-usage-report.js";
 
 const CODEX_PROVIDER = "openai-codex";
 const CODEX_USAGE_URL = "https://chatgpt.com/backend-api/wham/usage";
@@ -38,6 +48,7 @@ export type CodexUsageStatus = {
 
 export type CodexUsageExtensionOptions = CodexUsageCardOptions & {
   fetch?: FetchLike;
+  agentDir?: string;
 };
 
 type RinExtensionCommandResultUi = ExtensionCommandContext["ui"] & {
@@ -259,16 +270,37 @@ export function createCodexUsageExtension(
   options: CodexUsageExtensionOptions = {},
 ): ExtensionFactory {
   return function codexUsage(pi: ExtensionAPI): void {
+    registerCodexTelemetry(pi, { agentDir: options.agentDir });
     pi.registerCommand("usage", {
       description: "Show ChatGPT Codex quota status",
       chat: true,
-      handler: async (_args, ctx) => {
+      handler: async (args, ctx) => {
         try {
+          const agentDir = resolveAgentDir(options.agentDir);
+          if (args.trim()) {
+            const report = renderCodexUsageReport(
+              agentDir,
+              parseCodexUsageReportArgs(args),
+              options.now?.() || new Date(),
+            );
+            ctx.ui.notify(report, "info");
+            return;
+          }
           const status = await loadCodexUsage(ctx, options.fetch);
-          const fallbackText = renderCodexUsage(status);
+          const now = options.now?.() || new Date();
+          const trend =
+            options.trend || buildUsageTrendSeries(agentDir, { now });
+          const fallbackText = [
+            renderCodexUsage(status),
+            renderUsageTrendTextChart(trend),
+          ].join("\n\n");
           const richUi = ctx.ui as RinExtensionCommandResultUi;
           if (richUi.rinCommandResult) {
-            const imagePath = await writeCodexUsageCard(status, options);
+            const imagePath = await writeCodexUsageCard(status, {
+              ...options,
+              now: () => now,
+              trend,
+            });
             richUi.rinCommandResult({
               fallbackText,
               parts: [

@@ -205,6 +205,7 @@ test("renders a standalone Codex-only PNG card", async () => {
 test("registers chat-capable /usage with rich image output and a native Pi text fallback", async () => {
   let command: any;
   const pi = {
+    on() {},
     registerCommand(name: string, options: unknown) {
       assert.equal(name, "usage");
       command = options;
@@ -216,6 +217,7 @@ test("registers chat-capable /usage with rich image output and a native Pi text 
     path.join(os.tmpdir(), "codex-usage-command-"),
   );
   createCodexUsageExtension({
+    agentDir: outputDir,
     outputDir,
     now: () => new Date("2026-08-09T00:00:00.000Z"),
     fetch: (async () =>

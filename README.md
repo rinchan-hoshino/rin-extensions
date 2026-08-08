@@ -14,9 +14,24 @@ Both extensions are enabled by default. Run `/usage` after installation to verif
 
 ### `codex-usage`
 
-Registers `/usage` for TUI and Chat Bridge. It reads the refreshed `openai-codex` OAuth credential through Pi's model registry and reports only ChatGPT Codex quota windows, account, plan, and credits. Chat receives a Codex-only PNG card; terminal frontends receive a text fallback.
+Owns the complete usage feature set removed from Rin core, narrowed to `openai-codex` only:
 
-It does not collect token telemetry, query other providers, persist a usage database, or render token-history charts.
+- records Codex session, turn, message, tool, capability, token, cache, context, and cost events through Pi lifecycle hooks;
+- persists events under `~/.rin/data/extensions/codex-usage/usage.db` and migrates only Codex rows from the retired core database;
+- supports aggregate/event queries, dimensions, filters, ordering, JSON, and all-time or day windows through `rin usage ...`;
+- combines ChatGPT Codex account, plan, quota windows, resets, credits, and a 7-day token-history chart in the `/usage` PNG;
+- uses the same data as a terminal text fallback.
+
+The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are intentionally absent.
+
+Examples:
+
+```bash
+rin usage --days 7 --group-by provider_model
+rin usage --events --filter event_type=message_end --limit 20
+rin usage --all-time --json
+rin usage --list-dimensions
+```
 
 ### `self-improve-reminder`
 

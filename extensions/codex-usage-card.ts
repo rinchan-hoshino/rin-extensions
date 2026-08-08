@@ -4,12 +4,14 @@ import path from "node:path";
 import { deflateSync } from "node:zlib";
 
 import type { CodexUsageStatus, CodexUsageWindow } from "./codex-usage.js";
+import type { UsageTrendSeries } from "./codex-usage-trend.js";
 
 type Rgba = readonly [number, number, number, number];
 
 export type CodexUsageCardOptions = {
   outputDir?: string;
   now?: () => Date;
+  trend?: UsageTrendSeries;
 };
 
 const WIDTH = 1000;
@@ -143,6 +145,48 @@ function drawText(
   }
 }
 
+function drawLine(
+  pixels: Uint8Array,
+  height: number,
+  x0: number,
+  y0: number,
+  x1: number,
+  y1: number,
+  color: Rgba,
+  thickness = 1,
+): void {
+  let x = Math.round(x0);
+  let y = Math.round(y0);
+  const targetX = Math.round(x1);
+  const targetY = Math.round(y1);
+  const dx = Math.abs(targetX - x);
+  const sx = x < targetX ? 1 : -1;
+  const dy = -Math.abs(targetY - y);
+  const sy = y < targetY ? 1 : -1;
+  let error = dx + dy;
+  while (true) {
+    rect(pixels, height, x, y, thickness, thickness, color);
+    if (x === targetX && y === targetY) break;
+    const twice = error * 2;
+    if (twice >= dy) {
+      error += dy;
+      x += sx;
+    }
+    if (twice <= dx) {
+      error += dx;
+      y += sy;
+    }
+  }
+}
+
+function compactCount(value: unknown): string {
+  const count = Math.max(0, Number(value || 0));
+  if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
+  return String(Math.round(count));
+}
+
 function windowLabel(window: CodexUsageWindow): string {
   if (window.name === "five_hour") return "5-HOUR";
   if (window.name === "weekly") return "WEEKLY";
@@ -210,12 +254,16 @@ function encodePng(pixels: Uint8Array, height: number): Buffer {
   ]);
 }
 
-export function renderCodexUsageCardPng(status: CodexUsageStatus): Buffer {
+export function renderCodexUsageCardPng(
+  status: CodexUsageStatus,
+  options: Pick<CodexUsageCardOptions, "trend"> = {},
+): Buffer {
   const windows = status.windows.length
     ? status.windows
     : [{ name: "quota", percentLeft: undefined }];
   const creditsHeight = status.credits ? 58 : 0;
-  const height = 196 + windows.length * 92 + creditsHeight + 64;
+  const trendHeight = options.trend ? 330 : 0;
+  const height = 196 + windows.length * 92 + creditsHeight + trendHeight + 64;
   const pixels = canvas(WIDTH, height, [9, 14, 29, 255]);
   const text: Rgba = [226, 232, 240, 255];
   const muted: Rgba = [148, 163, 184, 255];
@@ -292,11 +340,124 @@ export function renderCodexUsageCardPng(status: CodexUsageStatus): Buffer {
     );
     footerTop += creditsHeight;
   }
+  const trend = options.trend;
+  if (trend) {
+    const panelX = 40;
+    const panelY = footerTop;
+    const panelWidth = WIDTH - 80;
+    const panelHeight = 294;
+    rect(pixels, height, panelX, panelY, panelWidth, panelHeight, panel);
+    rect(pixels, height, panelX, panelY, panelWidth, 2, border);
+    rect(
+      pixels,
+      height,
+      panelX,
+      panelY + panelHeight - 2,
+      panelWidth,
+      2,
+      border,
+    );
+    drawText(
+      pixels,
+      height,
+      `7D TOKEN HISTORY - ${trend.bucketHours}H BUCKETS`,
+      panelX + 20,
+      panelY + 18,
+      2,
+      accent,
+    );
+    drawText(
+      pixels,
+      height,
+      `TOTAL ${compactCount(trend.total_tokens)}  PEAK ${compactCount(trend.peak_total_tokens)}`,
+      panelX + 20,
+      panelY + 48,
+      2,
+      muted,
+    );
+    const chartX = panelX + 54;
+    const chartY = panelY + 84;
+    const chartWidth = panelWidth - 84;
+    const chartHeight = 172;
+    for (let index = 0; index <= 4; index += 1) {
+      const y = chartY + (index / 4) * chartHeight;
+      drawLine(pixels, height, chartX, y, chartX + chartWidth, y, border);
+    }
+    drawLine(
+      pixels,
+      height,
+      chartX,
+      chartY,
+      chartX,
+      chartY + chartHeight,
+      muted,
+    );
+    drawLine(
+      pixels,
+      height,
+      chartX,
+      chartY + chartHeight,
+      chartX + chartWidth,
+      chartY + chartHeight,
+      muted,
+    );
+    const points = trend.points;
+    const maximum = Math.max(0, trend.peak_total_tokens);
+    for (let index = 1; index < points.length; index += 1) {
+      const previous = points[index - 1];
+      const current = points[index];
+      const denominator = Math.max(1, points.length - 1);
+      const previousX = chartX + ((index - 1) / denominator) * chartWidth;
+      const currentX = chartX + (index / denominator) * chartWidth;
+      const previousY =
+        maximum <= 0
+          ? chartY + chartHeight
+          : chartY +
+            chartHeight -
+            (previous.total_tokens / maximum) * chartHeight;
+      const currentY =
+        maximum <= 0
+          ? chartY + chartHeight
+          : chartY +
+            chartHeight -
+            (current.total_tokens / maximum) * chartHeight;
+      drawLine(
+        pixels,
+        height,
+        previousX,
+        previousY,
+        currentX,
+        currentY,
+        accent,
+        3,
+      );
+    }
+    drawText(
+      pixels,
+      height,
+      "7D AGO",
+      chartX,
+      chartY + chartHeight + 14,
+      2,
+      muted,
+    );
+    drawText(
+      pixels,
+      height,
+      "NOW",
+      chartX + chartWidth - 34,
+      chartY + chartHeight + 14,
+      2,
+      muted,
+    );
+    footerTop += trendHeight;
+  }
+
   rect(pixels, height, 44, footerTop + 12, WIDTH - 88, 2, border);
   drawText(
     pixels,
     height,
-    "LIVE QUOTA - NO TOKEN HISTORY",
+    options.trend ? "CODEX QUOTA + TOKEN HISTORY" : "CODEX QUOTA",
     46,
     footerTop + 32,
     2,
@@ -339,7 +500,9 @@ export async function writeCodexUsageCard(
     outputDir,
     `codex-usage-${now.toISOString().replace(/[^0-9A-Za-z]/g, "")}.png`,
   );
-  await writeFile(filePath, renderCodexUsageCardPng(status), { mode: 0o600 });
+  await writeFile(filePath, renderCodexUsageCardPng(status, options), {
+    mode: 0o600,
+  });
   await pruneOutputFiles(outputDir, filePath);
   return filePath;
 }
