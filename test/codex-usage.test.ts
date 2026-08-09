@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -91,6 +92,23 @@ test("parses the current Codex quota response without other providers", () => {
       credits: "17",
     },
   );
+});
+
+test("loads the standalone quota client in native Node without the Pi extension graph", () => {
+  const clientUrl = new URL(
+    "../extensions/codex-usage-client.ts",
+    import.meta.url,
+  ).href;
+  const result = spawnSync(
+    process.execPath,
+    [
+      "--input-type=module",
+      "--eval",
+      `const client = await import(${JSON.stringify(clientUrl)}); if (typeof client.loadCodexUsageFromAccessToken !== "function") process.exit(2);`,
+    ],
+    { encoding: "utf8" },
+  );
+  assert.equal(result.status, 0, result.stderr || result.stdout);
 });
 
 test("loads Codex quota directly for standalone extension consumers", async () => {
