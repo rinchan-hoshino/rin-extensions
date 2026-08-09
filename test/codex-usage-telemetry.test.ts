@@ -9,7 +9,10 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-import { registerCodexTelemetry } from "../extensions/codex-usage-telemetry.ts";
+import {
+  calculateActualTokenUsage,
+  registerCodexTelemetry,
+} from "../extensions/codex-usage-telemetry.ts";
 import {
   appendTokenTelemetryEvent,
   flushTokenTelemetryEvents,
@@ -39,6 +42,50 @@ function codexEvent(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+test("actual token usage includes normalized cache reads and writes without using context length", () => {
+  assert.deepEqual(
+    calculateActualTokenUsage({
+      input: 100,
+      output: 20,
+      cacheRead: 80,
+      cacheWrite: 10,
+      totalTokens: 210,
+      cost: {},
+    }),
+    {
+      input: 100,
+      output: 20,
+      cacheRead: 80,
+      cacheWrite: 10,
+      total: 210,
+      costInput: 0,
+      costOutput: 0,
+      costCacheRead: 0,
+      costCacheWrite: 0,
+      costTotal: 0,
+    },
+  );
+  assert.equal(
+    calculateActualTokenUsage({
+      input_tokens: 100,
+      output_tokens: 20,
+      cache_read_input_tokens: 80,
+      cache_creation_input_tokens: 10,
+    }).total,
+    210,
+  );
+  assert.equal(
+    calculateActualTokenUsage({
+      input: 100,
+      output: 20,
+      cacheRead: 80,
+      cacheWrite: 10,
+      totalTokens: 205,
+    }).total,
+    205,
+  );
+});
 
 test("Codex usage store persists events, aggregates dimensions, and builds history", async () => {
   const agentDir = await tempDir();

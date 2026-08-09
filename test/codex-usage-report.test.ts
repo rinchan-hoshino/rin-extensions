@@ -45,7 +45,7 @@ test("usage report preserves the original CLI query surface", async () => {
     assert.match(report, /321/);
     const actual = renderCodexUsageReport(
       agentDir,
-      parseCodexUsageReportArgs("--days 2"),
+      parseCodexUsageReportArgs("--quota --days 2"),
       new Date("2026-08-09T00:00:00.000Z"),
     );
     assert.match(actual, /actual Codex quota consumption/);

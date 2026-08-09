@@ -34,7 +34,7 @@ export function parseCodexUsageReportArgs(
     orderBy: "total_tokens",
     direction: "desc",
     listDimensions: false,
-    tokens: false,
+    tokens: true,
   };
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -59,6 +59,7 @@ export function parseCodexUsageReportArgs(
       options.events = true;
       options.tokens = true;
     } else if (token === "--tokens") options.tokens = true;
+    else if (token === "--quota") options.tokens = false;
     else if (token === "--json") options.json = true;
     else if (token === "--limit")
       options.limit = Math.max(1, Number(value()) || 50);
@@ -129,7 +130,7 @@ export function renderCodexUsageReport(
       `Observed actual Codex quota consumption (${options.allTime ? "all time" : `${options.days}d`})`,
       `5-hour window: ${fiveHour.consumedPercent.toFixed(2)}%`,
       `weekly window: ${weekly.consumedPercent.toFixed(2)}%`,
-      "Use --tokens for token/context diagnostics.",
+      "Quota is status-only; default usage statistics are actual processed tokens.",
     ].join("\n");
   }
   const from = options.allTime

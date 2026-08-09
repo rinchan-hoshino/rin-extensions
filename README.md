@@ -19,9 +19,9 @@ Owns the complete usage feature set removed from Rin core, narrowed to `openai-c
 - records Codex session, turn, message, tool, capability, token, cache, context, and cost events through Pi lifecycle hooks;
 - persists events under `~/.rin/data/extensions/codex-usage/usage.db` and migrates only Codex rows from the retired core database;
 - records official 5-hour and weekly `percent_left` snapshots and derives actual quota consumption from decreases within the same reset epoch;
-- reports actual quota consumption by default through `rin usage ...`; `--tokens` keeps token/context diagnostics available;
-- combines ChatGPT Codex account, plan, quota windows, resets, credits, and a 7-day actual-quota chart in the `/usage` PNG;
-- retains token aggregate/event queries, dimensions, filters, ordering, JSON, and all-time or day windows as secondary diagnostics;
+- reports actual processed token usage by default, using Pi's authoritative `totalTokens` and the normalized input/output/cache-read/cache-write components;
+- combines ChatGPT Codex quota status with a 7-day actual-token chart in the `/usage` PNG, including cached tokens rather than treating context length as usage;
+- keeps official quota snapshots as status/history available with `rin usage --quota`, while token aggregate/event queries remain available with all dimensions and filters;
 - uses the same data as a terminal text fallback.
 
 The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are intentionally absent.
@@ -29,8 +29,8 @@ The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are
 Examples:
 
 ```bash
-rin usage --days 7
-rin usage --tokens --days 7 --group-by provider_model
+rin usage --days 7 --group-by provider_model
+rin usage --quota --days 7
 rin usage --events --filter event_type=message_end --limit 20
 rin usage --all-time --json
 rin usage --list-dimensions

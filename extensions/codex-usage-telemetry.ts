@@ -90,7 +90,7 @@ function nextId(ctx: ExtensionContext, eventType: string): string {
   return [sessionKey(ctx), instanceId, eventType, state.sequence].join(":");
 }
 
-function readUsage(usage: any) {
+export function calculateActualTokenUsage(usage: any) {
   const input = finite(usage?.input ?? usage?.input_tokens);
   const output = finite(usage?.output ?? usage?.output_tokens);
   const cacheRead = finite(usage?.cacheRead ?? usage?.cache_read_input_tokens);
@@ -282,7 +282,7 @@ export function registerCodexTelemetry(
     const message: any = event.message;
     const provider = text(message?.provider) || stateFor(ctx).provider;
     if (!isCodex(provider)) return;
-    const usage = readUsage(message?.usage);
+    const usage = calculateActualTokenUsage(message?.usage);
     const names = toolNames(message?.content);
     const role = text(message?.role);
     const capabilityKind =
