@@ -26,6 +26,8 @@ export type UsageTrendSeries = {
   points: UsageTrendPoint[];
   total_tokens: number;
   peak_total_tokens: number;
+  total_cost: number;
+  peak_cost: number;
 };
 
 export type UsageTrendOptions = {
@@ -166,6 +168,8 @@ export function buildUsageTrendSeries(
 
   const total = points.reduce((sum, point) => sum + point.total_tokens, 0);
   const peak = Math.max(0, ...points.map((point) => point.total_tokens));
+  const totalCost = points.reduce((sum, point) => sum + point.cost_total, 0);
+  const peakCost = Math.max(0, ...points.map((point) => point.cost_total));
   return {
     generatedAt: toIso(nowMs),
     start: toIso(range.startMs),
@@ -175,16 +179,25 @@ export function buildUsageTrendSeries(
     points,
     total_tokens: total,
     peak_total_tokens: peak,
+    total_cost: totalCost,
+    peak_cost: peakCost,
   };
 }
 
-function formatCompactCount(value: unknown) {
+export function formatCompactCount(value: unknown) {
   const numeric = Math.max(0, Number(value || 0));
   if (numeric >= 1_000_000_000)
     return `${(numeric / 1_000_000_000).toFixed(1)}B`;
   if (numeric >= 1_000_000) return `${(numeric / 1_000_000).toFixed(1)}M`;
   if (numeric >= 1_000) return `${(numeric / 1_000).toFixed(1)}K`;
   return String(Math.round(numeric));
+}
+
+export function formatUsdEquivalent(value: unknown) {
+  const numeric = Math.max(0, Number(value || 0));
+  if (numeric >= 1_000_000) return `$${(numeric / 1_000_000).toFixed(1)}M`;
+  if (numeric >= 1_000) return `$${(numeric / 1_000).toFixed(1)}K`;
+  return `$${numeric.toFixed(2)}`;
 }
 
 function formatTrendTick(value: unknown) {
@@ -224,7 +237,7 @@ export function renderUsageTrendTextChart(series: UsageTrendSeries) {
   if (!points.length) return "7d usage trend\n  (no usage buckets)";
   const height = 8;
   const width = points.length;
-  const max = Math.max(0, series.peak_total_tokens);
+  const max = Math.max(0, series.peak_cost);
   const yFor = (value: number) => {
     if (max <= 0) return height - 1;
     return Math.max(
@@ -235,30 +248,30 @@ export function renderUsageTrendTextChart(series: UsageTrendSeries) {
   const grid = Array.from({ length: height }, () =>
     Array.from({ length: width }, () => " "),
   );
-  let previousY = yFor(points[0].total_tokens);
+  let previousY = yFor(points[0].cost_total);
   grid[previousY][0] = "•";
   for (let index = 1; index < points.length; index += 1) {
-    const nextY = yFor(points[index].total_tokens);
+    const nextY = yFor(points[index].cost_total);
     grid[nextY][index] = lineChar(previousY, nextY);
     previousY = nextY;
   }
 
   const labelWidth = Math.max(
     4,
-    formatCompactCount(max).length,
-    formatCompactCount(max / 2).length,
+    formatUsdEquivalent(max).length,
+    formatUsdEquivalent(max / 2).length,
   );
   const rows = grid.map((row, index) => {
     let label = "";
-    if (index === 0) label = formatCompactCount(max);
+    if (index === 0) label = formatUsdEquivalent(max);
     else if (index === Math.floor((height - 1) / 2)) {
-      label = formatCompactCount(max / 2);
-    } else if (index === height - 1) label = "0";
+      label = formatUsdEquivalent(max / 2);
+    } else if (index === height - 1) label = "$0.00";
     return `  ${label.padStart(labelWidth)} ┤${row.join("")}`;
   });
 
   return [
-    `7d usage trend · ${series.bucketHours}h buckets · total ${formatCompactCount(series.total_tokens)} · peak ${formatCompactCount(max)}`,
+    `7d usage value · USD equivalent · ${series.bucketHours}h buckets · total ${formatUsdEquivalent(series.total_cost)} · peak ${formatUsdEquivalent(max)}`,
     ...rows,
     `  ${"".padStart(labelWidth)} └${"─".repeat(width)}`,
     `  ${"".padStart(labelWidth + 2)} ${renderTrendAxisLabels(series, width)}`,

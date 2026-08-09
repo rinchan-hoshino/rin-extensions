@@ -12,6 +12,7 @@ import { registerCodexTelemetry } from "./codex-usage-telemetry.js";
 import { resolveAgentDir } from "./codex-usage-store.js";
 import {
   buildUsageTrendSeries,
+  formatCompactCount,
   renderUsageTrendTextChart,
 } from "./codex-usage-trend.js";
 import { recordCodexQuotaSnapshot } from "./codex-quota-history.js";
@@ -145,18 +146,20 @@ export function createCodexUsageExtension(
           ].join("\n\n");
           const richUi = ctx.ui as RinExtensionCommandResultUi;
           if (richUi.rinCommandResult) {
+            const cacheTokens = trend.points.reduce(
+              (sum, point) =>
+                sum + point.cache_read_tokens + point.cache_write_tokens,
+              0,
+            );
+            const cachePercent = trend.total_tokens
+              ? Math.round((cacheTokens / trend.total_tokens) * 100)
+              : 0;
             const imagePath = await writeCodexUsageCard(status, {
               ...options,
               now: () => now,
               trend,
-              trendTitle: `7D ACTUAL TOKEN USAGE - ${trend.bucketHours}H BUCKETS`,
-              trendSecondary: `CACHE ${Math.round(
-                trend.points.reduce(
-                  (sum, point) =>
-                    sum + point.cache_read_tokens + point.cache_write_tokens,
-                  0,
-                ),
-              )}`,
+              trendTitle: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
+              trendSecondary: `RAW ${formatCompactCount(trend.total_tokens)}  CACHE ${cachePercent}%`,
             });
             richUi.rinCommandResult({
               fallbackText,

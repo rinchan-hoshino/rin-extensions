@@ -19,6 +19,7 @@ import {
 } from "../extensions/codex-usage.ts";
 import {
   buildTrendYAxisTicks,
+  buildUsageCostTrendView,
   renderCodexUsageCardPng,
   writeCodexUsageCard,
 } from "../extensions/codex-usage-card.ts";
@@ -189,11 +190,31 @@ test("renders a compact text fallback without token history", () => {
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
 });
 
-test("builds actual-token y-axis ticks from peak through zero", () => {
-  assert.deepEqual(
-    buildTrendYAxisTicks(20_000_000),
-    [20_000_000, 15_000_000, 10_000_000, 5_000_000, 0],
-  );
+test("builds cache-adjusted USD-equivalent history labels", () => {
+  const view = buildUsageCostTrendView({
+    days: 7,
+    bucketHours: 3,
+    total_tokens: 158_684_617,
+    peak_total_tokens: 35_900_000,
+    total_cost: 167.7398,
+    peak_cost: 42.4,
+    points: [{ cost_total: 42.4 }, { cost_total: 0 }],
+  } as any);
+  assert.equal(view.title, "7D USAGE VALUE - 3H BUCKETS");
+  assert.equal(view.axisLabel, "USD/3H");
+  assert.equal(view.summary, "TOTAL $167.74  PEAK $42.40");
+  assert.deepEqual(view.values, [42.4, 0]);
+  assert.deepEqual(view.tickLabels, [
+    "$42.40",
+    "$31.80",
+    "$21.20",
+    "$10.60",
+    "$0.00",
+  ]);
+});
+
+test("builds cost y-axis ticks from peak through zero", () => {
+  assert.deepEqual(buildTrendYAxisTicks(20), [20, 15, 10, 5, 0]);
   assert.deepEqual(buildTrendYAxisTicks(0), [0]);
   assert.deepEqual(buildTrendYAxisTicks(Number.NaN), [0]);
 });

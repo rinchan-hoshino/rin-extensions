@@ -4,7 +4,10 @@ import path from "node:path";
 import { deflateSync } from "node:zlib";
 
 import type { CodexUsageStatus, CodexUsageWindow } from "./codex-usage.js";
-import type { UsageTrendSeries } from "./codex-usage-trend.js";
+import {
+  formatUsdEquivalent,
+  type UsageTrendSeries,
+} from "./codex-usage-trend.js";
 
 type Rgba = readonly [number, number, number, number];
 
@@ -13,13 +16,13 @@ export type CodexUsageCardOptions = {
   now?: () => Date;
   trend?: UsageTrendSeries;
   trendTitle?: string;
-  trendUnit?: string;
   trendSecondary?: string;
 };
 
 const WIDTH = 1000;
 const FONT_5X7: Record<string, readonly string[]> = {
   " ": ["00000", "00000", "00000", "00000", "00000", "00000", "00000"],
+  $: ["00100", "01111", "10100", "01110", "00101", "11110", "00100"],
   "0": ["01110", "10001", "10011", "10101", "11001", "10001", "01110"],
   "1": ["00100", "01100", "00100", "00100", "00100", "00100", "01110"],
   "2": ["01110", "10001", "00001", "00010", "00100", "01000", "11111"],
@@ -182,14 +185,6 @@ function drawLine(
   }
 }
 
-function compactCount(value: unknown): string {
-  const count = Math.max(0, Number(value || 0));
-  if (count >= 1_000_000_000) return `${(count / 1_000_000_000).toFixed(1)}B`;
-  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1)}M`;
-  if (count >= 1_000) return `${(count / 1_000).toFixed(1)}K`;
-  return String(Math.round(count));
-}
-
 export function buildTrendYAxisTicks(maximum: number, divisions = 4): number[] {
   const peak = Math.max(0, Number(maximum) || 0);
   if (peak <= 0) return [0];
@@ -197,6 +192,18 @@ export function buildTrendYAxisTicks(maximum: number, divisions = 4): number[] {
     { length: divisions + 1 },
     (_, index) => peak * (1 - index / divisions),
   );
+}
+
+export function buildUsageCostTrendView(trend: UsageTrendSeries) {
+  const ticks = buildTrendYAxisTicks(trend.peak_cost);
+  return {
+    title: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
+    axisLabel: `USD/${trend.bucketHours}H`,
+    summary: `TOTAL ${formatUsdEquivalent(trend.total_cost)}  PEAK ${formatUsdEquivalent(trend.peak_cost)}`,
+    values: trend.points.map((point) => point.cost_total),
+    ticks,
+    tickLabels: ticks.map(formatUsdEquivalent),
+  };
 }
 
 function windowLabel(window: CodexUsageWindow): string {
@@ -270,7 +277,7 @@ export function renderCodexUsageCardPng(
   status: CodexUsageStatus,
   options: Pick<
     CodexUsageCardOptions,
-    "trend" | "trendTitle" | "trendUnit" | "trendSecondary"
+    "trend" | "trendTitle" | "trendSecondary"
   > = {},
 ): Buffer {
   const windows = status.windows.length
@@ -372,10 +379,11 @@ export function renderCodexUsageCardPng(
       2,
       border,
     );
+    const costView = buildUsageCostTrendView(trend);
     drawText(
       pixels,
       height,
-      options.trendTitle || `7D TOKEN HISTORY - ${trend.bucketHours}H BUCKETS`,
+      options.trendTitle || costView.title,
       panelX + 20,
       panelY + 18,
       2,
@@ -384,7 +392,7 @@ export function renderCodexUsageCardPng(
     drawText(
       pixels,
       height,
-      `TOTAL ${compactCount(trend.total_tokens)}${options.trendUnit || ""}  PEAK ${compactCount(trend.peak_total_tokens)}${options.trendUnit || ""}${options.trendSecondary ? `  ${options.trendSecondary}` : ""}`,
+      `${costView.summary}${options.trendSecondary ? `  ${options.trendSecondary}` : ""}`,
       panelX + 20,
       panelY + 48,
       2,
@@ -394,14 +402,14 @@ export function renderCodexUsageCardPng(
     const chartY = panelY + 84;
     const chartWidth = panelWidth - 94;
     const chartHeight = 172;
-    const maximum = Math.max(0, trend.peak_total_tokens);
-    const yTicks = buildTrendYAxisTicks(maximum);
+    const maximum = Math.max(0, trend.peak_cost);
+    const yTicks = costView.ticks;
     for (let index = 0; index <= 4; index += 1) {
       const y = chartY + (index / 4) * chartHeight;
       drawLine(pixels, height, chartX, y, chartX + chartWidth, y, border);
       if (maximum > 0 || index === 4) {
         const tick = maximum > 0 ? yTicks[index] : 0;
-        const label = compactCount(tick);
+        const label = formatUsdEquivalent(tick);
         drawText(
           pixels,
           height,
@@ -413,7 +421,7 @@ export function renderCodexUsageCardPng(
         );
       }
     }
-    drawText(pixels, height, "TOKENS/3H", chartX, chartY - 14, 1, muted);
+    drawText(pixels, height, costView.axisLabel, chartX, chartY - 14, 1, muted);
     drawLine(
       pixels,
       height,
@@ -444,13 +452,11 @@ export function renderCodexUsageCardPng(
           ? chartY + chartHeight
           : chartY +
             chartHeight -
-            (previous.total_tokens / maximum) * chartHeight;
+            (previous.cost_total / maximum) * chartHeight;
       const currentY =
         maximum <= 0
           ? chartY + chartHeight
-          : chartY +
-            chartHeight -
-            (current.total_tokens / maximum) * chartHeight;
+          : chartY + chartHeight - (current.cost_total / maximum) * chartHeight;
       drawLine(
         pixels,
         height,
@@ -487,7 +493,7 @@ export function renderCodexUsageCardPng(
   drawText(
     pixels,
     height,
-    options.trend ? "CODEX QUOTA + TOKEN HISTORY" : "CODEX QUOTA",
+    options.trend ? "CODEX QUOTA + USD-EQUIV HISTORY" : "CODEX QUOTA",
     46,
     footerTop + 32,
     2,
