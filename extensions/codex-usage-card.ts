@@ -12,6 +12,9 @@ export type CodexUsageCardOptions = {
   outputDir?: string;
   now?: () => Date;
   trend?: UsageTrendSeries;
+  trendTitle?: string;
+  trendUnit?: string;
+  trendSecondary?: string;
 };
 
 const WIDTH = 1000;
@@ -256,7 +259,10 @@ function encodePng(pixels: Uint8Array, height: number): Buffer {
 
 export function renderCodexUsageCardPng(
   status: CodexUsageStatus,
-  options: Pick<CodexUsageCardOptions, "trend"> = {},
+  options: Pick<
+    CodexUsageCardOptions,
+    "trend" | "trendTitle" | "trendUnit" | "trendSecondary"
+  > = {},
 ): Buffer {
   const windows = status.windows.length
     ? status.windows
@@ -360,7 +366,7 @@ export function renderCodexUsageCardPng(
     drawText(
       pixels,
       height,
-      `7D TOKEN HISTORY - ${trend.bucketHours}H BUCKETS`,
+      options.trendTitle || `7D TOKEN HISTORY - ${trend.bucketHours}H BUCKETS`,
       panelX + 20,
       panelY + 18,
       2,
@@ -369,7 +375,7 @@ export function renderCodexUsageCardPng(
     drawText(
       pixels,
       height,
-      `TOTAL ${compactCount(trend.total_tokens)}  PEAK ${compactCount(trend.peak_total_tokens)}`,
+      `TOTAL ${compactCount(trend.total_tokens)}${options.trendUnit || ""}  PEAK ${compactCount(trend.peak_total_tokens)}${options.trendUnit || ""}${options.trendSecondary ? `  ${options.trendSecondary}` : ""}`,
       panelX + 20,
       panelY + 48,
       2,

@@ -192,9 +192,25 @@ function flush(ctx: ExtensionContext, configuredAgentDir = "") {
 
 export function registerCodexTelemetry(
   pi: ExtensionAPI,
-  options: { agentDir?: string } = {},
+  options: {
+    agentDir?: string;
+    captureQuota?: (ctx: ExtensionContext) => Promise<void>;
+    quotaDelayMs?: number;
+  } = {},
 ) {
   const configuredAgentDir = text(options.agentDir);
+  const captureQuota = (ctx: ExtensionContext, delayed = false) => {
+    if (!options.captureQuota) return;
+    if (!delayed) {
+      void options.captureQuota(ctx).catch(() => {});
+      return;
+    }
+    const timer = setTimeout(
+      () => void options.captureQuota?.(ctx).catch(() => {}),
+      Math.max(0, options.quotaDelayMs ?? 2_000),
+    );
+    timer.unref?.();
+  };
   const recordCodex = (
     ctx: ExtensionContext,
     eventType: string,
@@ -211,6 +227,7 @@ export function registerCodexTelemetry(
         previousSessionFile: event.previousSessionFile,
       },
     });
+    captureQuota(ctx);
   });
 
   pi.on("model_select", async (event, ctx) => {
@@ -324,6 +341,7 @@ export function registerCodexTelemetry(
       metadata: { messageCount: event.messages.length },
     });
     flushCodex(ctx);
+    captureQuota(ctx, true);
   });
 
   pi.on("session_compact", async (event, ctx) => {

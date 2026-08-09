@@ -3,6 +3,7 @@ import {
   queryTokenUsageAggregate,
   queryTokenUsageEvents,
 } from "./codex-usage-store.js";
+import { queryQuotaConsumptionSeries } from "./codex-quota-history.js";
 
 export type CodexUsageReportOptions = {
   days: number;
@@ -15,6 +16,7 @@ export type CodexUsageReportOptions = {
   orderBy: string;
   direction: "asc" | "desc";
   listDimensions: boolean;
+  tokens: boolean;
 };
 
 export function parseCodexUsageReportArgs(
@@ -32,6 +34,7 @@ export function parseCodexUsageReportArgs(
     orderBy: "total_tokens",
     direction: "desc",
     listDimensions: false,
+    tokens: false,
   };
   for (let index = 0; index < tokens.length; index += 1) {
     const token = tokens[index];
@@ -52,7 +55,10 @@ export function parseCodexUsageReportArgs(
         key: pair.slice(0, split),
         value: pair.slice(split + 1),
       });
-    } else if (token === "--events") options.events = true;
+    } else if (token === "--events") {
+      options.events = true;
+      options.tokens = true;
+    } else if (token === "--tokens") options.tokens = true;
     else if (token === "--json") options.json = true;
     else if (token === "--limit")
       options.limit = Math.max(1, Number(value()) || 50);
@@ -102,6 +108,29 @@ export function renderCodexUsageReport(
 ): string {
   if (options.listDimensions) {
     return `Usage dimensions: ${listTokenUsageDimensions().join(", ")}`;
+  }
+  if (!options.tokens) {
+    const from = options.allTime
+      ? "1970-01-01T00:00:00.000Z"
+      : new Date(now.getTime() - options.days * 86_400_000).toISOString();
+    const until = now.toISOString();
+    const fiveHour = queryQuotaConsumptionSeries(agentDir, {
+      windowName: "five_hour",
+      from,
+      until,
+    });
+    const weekly = queryQuotaConsumptionSeries(agentDir, {
+      windowName: "weekly",
+      from,
+      until,
+    });
+    if (options.json) return JSON.stringify({ fiveHour, weekly }, null, 2);
+    return [
+      `Observed actual Codex quota consumption (${options.allTime ? "all time" : `${options.days}d`})`,
+      `5-hour window: ${fiveHour.consumedPercent.toFixed(2)}%`,
+      `weekly window: ${weekly.consumedPercent.toFixed(2)}%`,
+      "Use --tokens for token/context diagnostics.",
+    ].join("\n");
   }
   const from = options.allTime
     ? undefined

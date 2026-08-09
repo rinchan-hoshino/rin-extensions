@@ -28,7 +28,7 @@ test("usage report preserves the original CLI query surface", async () => {
       agentDir,
     );
     const parsed = parseCodexUsageReportArgs(
-      "--days 2 --group-by provider_model --filter event_type=message_end --limit 10 --asc",
+      "--tokens --days 2 --group-by provider_model --filter event_type=message_end --limit 10 --asc",
     );
     assert.equal(parsed.days, 2);
     assert.deepEqual(parsed.groupBy, ["provider_model"]);
@@ -43,6 +43,12 @@ test("usage report preserves the original CLI query surface", async () => {
     );
     assert.match(report, /openai-codex\/gpt-5-codex/);
     assert.match(report, /321/);
+    const actual = renderCodexUsageReport(
+      agentDir,
+      parseCodexUsageReportArgs("--days 2"),
+      new Date("2026-08-09T00:00:00.000Z"),
+    );
+    assert.match(actual, /actual Codex quota consumption/);
     const json = renderCodexUsageReport(
       agentDir,
       parseCodexUsageReportArgs("--all-time --events --json"),

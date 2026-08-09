@@ -10,10 +10,12 @@ import {
 } from "./codex-usage-card.js";
 import { registerCodexTelemetry } from "./codex-usage-telemetry.js";
 import { resolveAgentDir } from "./codex-usage-store.js";
+import type { UsageTrendSeries } from "./codex-usage-trend.js";
 import {
-  buildUsageTrendSeries,
-  renderUsageTrendTextChart,
-} from "./codex-usage-trend.js";
+  queryQuotaConsumptionSeries,
+  recordCodexQuotaSnapshot,
+  type QuotaConsumptionSeries,
+} from "./codex-quota-history.js";
 import {
   parseCodexUsageReportArgs,
   renderCodexUsageReport,
@@ -106,17 +108,70 @@ export function renderCodexUsage(status: CodexUsageStatus): string {
   return lines.join("\n");
 }
 
+function readActualQuotaTrends(agentDir: string, now: Date) {
+  const until = now.toISOString();
+  const from = new Date(now.getTime() - 7 * 86_400_000).toISOString();
+  const read = (windowName: string) =>
+    queryQuotaConsumptionSeries(agentDir, { windowName, from, until });
+  return { fiveHour: read("five_hour"), weekly: read("weekly") };
+}
+
+function quotaTrendForCard(series: QuotaConsumptionSeries): UsageTrendSeries {
+  const points = series.points.map((point) => ({
+    timestamp: point.observedAt,
+    label: point.observedAt.slice(5, 16).replace("T", " "),
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_tokens: 0,
+    cache_write_tokens: 0,
+    total_tokens: point.consumedPercent,
+    rows: 1,
+    token_events: 0,
+    cost_total: 0,
+    context_tokens: 0,
+  }));
+  return {
+    generatedAt: series.until,
+    start: series.from,
+    end: series.until,
+    days: 7,
+    bucketHours: 0,
+    points,
+    total_tokens: series.consumedPercent,
+    peak_total_tokens: series.peakConsumedPercent,
+  };
+}
+
+function renderActualQuotaHistory(
+  fiveHour: QuotaConsumptionSeries,
+  weekly: QuotaConsumptionSeries,
+): string {
+  return [
+    "Observed actual Codex quota consumption (7d)",
+    `5-hour window: ${fiveHour.consumedPercent.toFixed(2)}%`,
+    `weekly window: ${weekly.consumedPercent.toFixed(2)}%`,
+    "Derived from official quota percent-left snapshots; resets are not counted as usage.",
+  ].join("\n");
+}
+
 export function createCodexUsageExtension(
   options: CodexUsageExtensionOptions = {},
 ): ExtensionFactory {
   return function codexUsage(pi: ExtensionAPI): void {
-    registerCodexTelemetry(pi, { agentDir: options.agentDir });
+    const agentDir = resolveAgentDir(options.agentDir);
+    const captureQuota = async (ctx: any) => {
+      const status = await loadCodexUsage(ctx, options.fetch);
+      recordCodexQuotaSnapshot(status, agentDir);
+    };
+    registerCodexTelemetry(pi, {
+      agentDir,
+      captureQuota,
+    });
     pi.registerCommand("usage", {
       description: "Show ChatGPT Codex quota status",
       chat: true,
       handler: async (args, ctx) => {
         try {
-          const agentDir = resolveAgentDir(options.agentDir);
           if (args.trim()) {
             const report = renderCodexUsageReport(
               agentDir,
@@ -128,11 +183,12 @@ export function createCodexUsageExtension(
           }
           const status = await loadCodexUsage(ctx, options.fetch);
           const now = options.now?.() || new Date();
-          const trend =
-            options.trend || buildUsageTrendSeries(agentDir, { now });
+          recordCodexQuotaSnapshot(status, agentDir, now.toISOString());
+          const quota = readActualQuotaTrends(agentDir, now);
+          const trend = options.trend || quotaTrendForCard(quota.weekly);
           const fallbackText = [
             renderCodexUsage(status),
-            renderUsageTrendTextChart(trend),
+            renderActualQuotaHistory(quota.fiveHour, quota.weekly),
           ].join("\n\n");
           const richUi = ctx.ui as RinExtensionCommandResultUi;
           if (richUi.rinCommandResult) {
@@ -140,6 +196,9 @@ export function createCodexUsageExtension(
               ...options,
               now: () => now,
               trend,
+              trendTitle: "7D ACTUAL QUOTA CONSUMPTION - WEEKLY",
+              trendUnit: "%",
+              trendSecondary: `5H ${quota.fiveHour.consumedPercent.toFixed(2)}%`,
             });
             richUi.rinCommandResult({
               fallbackText,
