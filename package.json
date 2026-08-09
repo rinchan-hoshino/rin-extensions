@@ -1,6 +1,6 @@
 {
   "name": "@rinchan-hoshino/rin-extensions",
-  "version": "0.1.6",
+  "version": "0.1.7",
   "private": true,
   "description": "First-party optional extensions for Rin and Pi",
   "type": "module",
@@ -12,7 +12,8 @@
   "pi": {
     "extensions": [
       "extensions/codex-usage.ts",
-      "extensions/self-improve-reminder.ts"
+      "extensions/self-improve-reminder.ts",
+      "extensions/i18n.ts"
     ]
   },
   "scripts": {

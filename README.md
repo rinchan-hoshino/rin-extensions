@@ -8,7 +8,7 @@ Experimental first-party extensions for [Rin](https://github.com/rinchan-hoshino
 rin install https://github.com/rinchan-hoshino/rin-extensions
 ```
 
-Both extensions are enabled by default. Run `/usage` after installation to verify Codex access. Individual resources can be disabled with Pi package settings.
+All extensions are enabled by default. Run `/usage` after installation to verify Codex access. Individual resources can be disabled with Pi package settings.
 
 ## Extensions
 
@@ -35,6 +35,12 @@ rin usage --events --filter event_type=message_end --limit 20
 rin usage --all-time --json
 rin usage --list-dimensions
 ```
+
+### `i18n`
+
+Owns the optional `~/.rin/i18n.json` Chat Bridge presentation catalog that was removed from Rin core. It reads command acknowledgements, compaction notices, and editable working frames, then publishes them through Rin's generic `rinChatPresentation` extension API. Missing or invalid values fall back to Rin's English defaults. `/reload` reapplies file changes without restarting the daemon.
+
+Both nested JSON objects and the historical dotted keys remain accepted. The existing file location is unchanged, so extraction does not require a user-data migration.
 
 ### `self-improve-reminder`
 
