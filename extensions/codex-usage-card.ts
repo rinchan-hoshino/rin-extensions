@@ -190,6 +190,15 @@ function compactCount(value: unknown): string {
   return String(Math.round(count));
 }
 
+export function buildTrendYAxisTicks(maximum: number, divisions = 4): number[] {
+  const peak = Math.max(0, Number(maximum) || 0);
+  if (peak <= 0) return [0];
+  return Array.from(
+    { length: divisions + 1 },
+    (_, index) => peak * (1 - index / divisions),
+  );
+}
+
 function windowLabel(window: CodexUsageWindow): string {
   if (window.name === "five_hour") return "5-HOUR";
   if (window.name === "weekly") return "WEEKLY";
@@ -381,14 +390,30 @@ export function renderCodexUsageCardPng(
       2,
       muted,
     );
-    const chartX = panelX + 54;
+    const chartX = panelX + 64;
     const chartY = panelY + 84;
-    const chartWidth = panelWidth - 84;
+    const chartWidth = panelWidth - 94;
     const chartHeight = 172;
+    const maximum = Math.max(0, trend.peak_total_tokens);
+    const yTicks = buildTrendYAxisTicks(maximum);
     for (let index = 0; index <= 4; index += 1) {
       const y = chartY + (index / 4) * chartHeight;
       drawLine(pixels, height, chartX, y, chartX + chartWidth, y, border);
+      if (maximum > 0 || index === 4) {
+        const tick = maximum > 0 ? yTicks[index] : 0;
+        const label = compactCount(tick);
+        drawText(
+          pixels,
+          height,
+          label,
+          chartX - 8 - label.length * 6,
+          y - 3,
+          1,
+          muted,
+        );
+      }
     }
+    drawText(pixels, height, "TOKENS/3H", chartX, chartY - 14, 1, muted);
     drawLine(
       pixels,
       height,
@@ -408,7 +433,6 @@ export function renderCodexUsageCardPng(
       muted,
     );
     const points = trend.points;
-    const maximum = Math.max(0, trend.peak_total_tokens);
     for (let index = 1; index < points.length; index += 1) {
       const previous = points[index - 1];
       const current = points[index];

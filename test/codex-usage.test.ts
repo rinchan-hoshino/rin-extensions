@@ -18,6 +18,7 @@ import {
   renderCodexUsage,
 } from "../extensions/codex-usage.ts";
 import {
+  buildTrendYAxisTicks,
   renderCodexUsageCardPng,
   writeCodexUsageCard,
 } from "../extensions/codex-usage-card.ts";
@@ -186,6 +187,15 @@ test("renders a compact text fallback without token history", () => {
   assert.match(output, /5-hour: 75% left, reset unknown/);
   assert.doesNotMatch(output, /[█░]/);
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
+});
+
+test("builds actual-token y-axis ticks from peak through zero", () => {
+  assert.deepEqual(
+    buildTrendYAxisTicks(20_000_000),
+    [20_000_000, 15_000_000, 10_000_000, 5_000_000, 0],
+  );
+  assert.deepEqual(buildTrendYAxisTicks(0), [0]);
+  assert.deepEqual(buildTrendYAxisTicks(Number.NaN), [0]);
 });
 
 test("renders a standalone Codex-only PNG card", async () => {
