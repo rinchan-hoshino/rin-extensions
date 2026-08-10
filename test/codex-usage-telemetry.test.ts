@@ -21,11 +21,6 @@ import {
   queryTokenUsageAggregate,
   queryTokenUsageEvents,
 } from "../extensions/codex-usage-store.ts";
-import {
-  buildUsageTrendSeries,
-  renderUsageTrendTextChart,
-} from "../extensions/codex-usage-trend.ts";
-
 function tempDir() {
   return mkdtemp(path.join(os.tmpdir(), "codex-usage-telemetry-"));
 }
@@ -90,7 +85,7 @@ test("actual token usage includes normalized cache reads and writes without usin
   );
 });
 
-test("Codex usage store persists events, aggregates dimensions, and builds history", async () => {
+test("Codex usage store persists events and aggregates dimensions", async () => {
   const agentDir = await tempDir();
   try {
     appendTokenTelemetryEvent(codexEvent({ id: "first" }), agentDir);
@@ -114,17 +109,6 @@ test("Codex usage store persists events, aggregates dimensions, and builds histo
     assert.equal(rows[0]?.total_tokens, 450);
     assert.equal(rows[0]?.provider_model, "openai-codex/gpt-5-codex");
     assert.ok(listTokenUsageDimensions().includes("capability"));
-    const trend = buildUsageTrendSeries(agentDir, {
-      now: "2026-08-09T00:00:00.000Z",
-      days: 1,
-      bucketHours: 3,
-    });
-    assert.equal(trend.total_tokens, 450);
-    assert.equal(trend.total_cost, 0.5);
-    assert.equal(trend.peak_cost, 0.25);
-    assert.ok(trend.points.some((point) => point.total_tokens > 0));
-    assert.match(renderUsageTrendTextChart(trend), /USD equivalent/);
-    assert.match(renderUsageTrendTextChart(trend), /total \$0\.50/);
     assert.throws(
       () =>
         appendTokenTelemetryEvent(

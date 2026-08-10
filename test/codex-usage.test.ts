@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -17,12 +17,6 @@ import {
   parseCodexUsageResponse,
   renderCodexUsage,
 } from "../extensions/codex-usage.ts";
-import {
-  buildTrendYAxisTicks,
-  buildUsageCostTrendView,
-  renderCodexUsageCardPng,
-  writeCodexUsageCard,
-} from "../extensions/codex-usage-card.ts";
 
 function jwt(payload: Record<string, unknown>): string {
   return `header.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.signature`;
@@ -184,74 +178,14 @@ test("renders a compact text fallback without token history", () => {
     windows: [{ name: "five_hour", percentLeft: 75 }],
     credits: "9",
   });
-  assert.match(output, /^ChatGPT Codex usage/m);
-  assert.match(output, /5-hour: 75% left, reset unknown/);
-  assert.doesNotMatch(output, /[█░]/);
+  assert.match(output, /^ChatGPT Codex$/m);
+  assert.match(output, /Account: owner@example.com \(pro\)/);
+  assert.match(output, /5h limit\n\[███████████████░░░░░\] 75% left/);
+  assert.match(output, /Resets unknown/);
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
 });
 
-test("builds cache-adjusted USD-equivalent history labels", () => {
-  const view = buildUsageCostTrendView({
-    days: 7,
-    bucketHours: 3,
-    total_tokens: 158_684_617,
-    peak_total_tokens: 35_900_000,
-    total_cost: 167.7398,
-    peak_cost: 42.4,
-    points: [{ cost_total: 42.4 }, { cost_total: 0 }],
-  } as any);
-  assert.equal(view.title, "7D USAGE VALUE - 3H BUCKETS");
-  assert.equal(view.axisLabel, "USD/3H");
-  assert.equal(view.summary, "TOTAL $167.74  PEAK $42.40");
-  assert.deepEqual(view.values, [42.4, 0]);
-  assert.deepEqual(view.tickLabels, [
-    "$42.40",
-    "$31.80",
-    "$21.20",
-    "$10.60",
-    "$0.00",
-  ]);
-});
-
-test("builds cost y-axis ticks from peak through zero", () => {
-  assert.deepEqual(buildTrendYAxisTicks(20), [20, 15, 10, 5, 0]);
-  assert.deepEqual(buildTrendYAxisTicks(0), [0]);
-  assert.deepEqual(buildTrendYAxisTicks(Number.NaN), [0]);
-});
-
-test("renders a standalone Codex-only PNG card", async () => {
-  const status = {
-    accountId: "acct-owner",
-    accountName: "owner@example.com",
-    plan: "pro",
-    windows: [
-      { name: "five_hour", percentLeft: 75 },
-      { name: "weekly", percentLeft: 42 },
-    ],
-    credits: "9",
-  };
-  const png = renderCodexUsageCardPng(status);
-  assert.deepEqual([...png.subarray(0, 8)], [137, 80, 78, 71, 13, 10, 26, 10]);
-  assert.equal(png.readUInt32BE(16), 1000);
-  assert.ok(png.readUInt32BE(20) >= 400);
-
-  const outputDir = await mkdtemp(path.join(os.tmpdir(), "codex-usage-card-"));
-  try {
-    const filePath = await writeCodexUsageCard(status, {
-      outputDir,
-      now: () => new Date("2026-08-09T00:00:00.000Z"),
-    });
-    assert.equal(path.dirname(filePath), outputDir);
-    assert.deepEqual(
-      [...(await readFile(filePath)).subarray(0, 8)],
-      [137, 80, 78, 71, 13, 10, 26, 10],
-    );
-  } finally {
-    await rm(outputDir, { recursive: true, force: true });
-  }
-});
-
-test("registers chat-capable /usage with rich image output and a native Pi text fallback", async () => {
+test("registers chat-capable /usage with Codex-style text and no chart result", async () => {
   let command: any;
   const pi = {
     on() {},
@@ -267,7 +201,6 @@ test("registers chat-capable /usage with rich image output and a native Pi text 
   );
   createCodexUsageExtension({
     agentDir: outputDir,
-    outputDir,
     now: () => new Date("2026-08-09T00:00:00.000Z"),
     fetch: (async () =>
       new Response(
@@ -291,18 +224,12 @@ test("registers chat-capable /usage with rich image output and a native Pi text 
   } as unknown as ExtensionCommandContext;
   try {
     await command.handler("", ctx);
-    assert.equal(notices.length, 0);
-    assert.match(richResults[0]?.fallbackText || "", /weekly: 52% left/);
-    assert.equal(richResults[0]?.parts?.[0]?.type, "image");
-    assert.deepEqual(
-      [...(await readFile(richResults[0].parts[0].path)).subarray(0, 8)],
-      [137, 80, 78, 71, 13, 10, 26, 10],
+    assert.equal(richResults.length, 0);
+    assert.match(
+      notices[0]?.[0] || "",
+      /Weekly limit\n\[██████████░░░░░░░░░░\] 52% left/,
     );
-
-    richResults.length = 0;
-    delete (ctx.ui as any).rinCommandResult;
-    await command.handler("", ctx);
-    assert.match(notices[0]?.[0] || "", /weekly: 52% left/);
+    assert.doesNotMatch(notices[0]?.[0] || "", /7d|USD equivalent|TOKENS\//i);
     assert.equal(notices[0]?.[1], "info");
 
     notices.length = 0;

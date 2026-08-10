@@ -4,17 +4,8 @@ import type {
   ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 
-import {
-  writeCodexUsageCard,
-  type CodexUsageCardOptions,
-} from "./codex-usage-card.js";
 import { registerCodexTelemetry } from "./codex-usage-telemetry.js";
 import { resolveAgentDir } from "./codex-usage-store.js";
-import {
-  buildUsageTrendSeries,
-  formatCompactCount,
-  renderUsageTrendTextChart,
-} from "./codex-usage-trend.js";
 import { recordCodexQuotaSnapshot } from "./codex-quota-history.js";
 import {
   parseCodexUsageReportArgs,
@@ -41,17 +32,10 @@ export type {
 
 const CODEX_PROVIDER = "openai-codex";
 
-export type CodexUsageExtensionOptions = CodexUsageCardOptions & {
+export type CodexUsageExtensionOptions = {
   fetch?: FetchLike;
   agentDir?: string;
-};
-
-type RinExtensionCommandResultUi = ExtensionCommandContext["ui"] & {
-  rinCommandResult?: (result: {
-    text?: string;
-    fallbackText?: string;
-    parts?: Array<Record<string, unknown>>;
-  }) => void;
+  now?: () => Date;
 };
 
 function text(value: unknown): string {
@@ -71,41 +55,60 @@ export async function loadCodexUsage(
 }
 
 function windowLabel(name: string): string {
-  if (name === "five_hour") return "5-hour";
-  if (name === "weekly") return "weekly";
-  return name.replaceAll("_", "-");
+  if (name === "five_hour") return "5h limit";
+  if (name === "weekly") return "Weekly limit";
+  return `${name.replaceAll("_", " ")} limit`;
 }
 
-function percent(value: unknown): string {
+function percentLeft(value: unknown): number | undefined {
   const numeric = Number(value);
-  if (!Number.isFinite(numeric)) return "unknown";
-  const rounded = Math.round(numeric * 10) / 10;
-  return `${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}% left`;
+  if (!Number.isFinite(numeric)) return undefined;
+  return Math.max(0, Math.min(100, numeric));
+}
+
+function renderLimitProgress(value: unknown): string {
+  const remaining = percentLeft(value);
+  if (remaining === undefined) return `[${"░".repeat(20)}] unknown`;
+  const filled = Math.round(remaining / 5);
+  const bar = `${"█".repeat(filled)}${"░".repeat(20 - filled)}`;
+  const rounded = Math.round(remaining * 10) / 10;
+  const label = Number.isInteger(rounded)
+    ? rounded.toFixed(0)
+    : rounded.toFixed(1);
+  return `[${bar}] ${label}% left`;
 }
 
 function resetTime(value: string | undefined): string {
-  if (!value) return "reset unknown";
+  if (!value) return "Resets unknown";
   const timestamp = Date.parse(value);
-  if (Number.isNaN(timestamp)) return "reset unknown";
-  return `resets ${new Date(timestamp).toLocaleString()}`;
+  if (Number.isNaN(timestamp)) return "Resets unknown";
+  return `Resets ${new Date(timestamp).toLocaleString()}`;
 }
 
 export function renderCodexUsage(status: CodexUsageStatus): string {
-  const lines = ["ChatGPT Codex usage"];
-  if (status.accountName || status.accountId) {
-    lines.push(`Account: ${status.accountName || status.accountId}`);
+  const lines = ["ChatGPT Codex"];
+  const account = status.accountName || status.accountId;
+  if (account) {
+    lines.push(`Account: ${account}${status.plan ? ` (${status.plan})` : ""}`);
+  } else if (status.plan) {
+    lines.push(`Plan: ${status.plan}`);
   }
-  if (status.plan) lines.push(`Plan: ${status.plan}`);
+  lines.push("");
   if (!status.windows.length) {
     lines.push("Quota windows unavailable");
   } else {
-    for (const window of status.windows) {
+    status.windows.forEach((window, index) => {
+      if (index) lines.push("");
       lines.push(
-        `${windowLabel(window.name)}: ${percent(window.percentLeft)}, ${resetTime(window.resetAt)}`,
+        windowLabel(window.name),
+        renderLimitProgress(window.percentLeft),
+        resetTime(window.resetAt),
       );
-    }
+    });
   }
-  if (status.credits) lines.push(`Credits: ${status.credits}`);
+  if (status.credits) {
+    lines.push("", `Credits: ${status.credits}`);
+  }
   return lines.join("\n");
 }
 
@@ -143,42 +146,7 @@ export function createCodexUsageExtension(
           const status = await loadCodexUsage(ctx, options.fetch);
           const now = options.now?.() || new Date();
           recordCodexQuotaSnapshot(status, agentDir, now.toISOString());
-          const trend =
-            options.trend || buildUsageTrendSeries(agentDir, { now });
-          const fallbackText = [
-            renderCodexUsage(status),
-            renderUsageTrendTextChart(trend),
-          ].join("\n\n");
-          const richUi = ctx.ui as RinExtensionCommandResultUi;
-          if (richUi.rinCommandResult) {
-            const cacheTokens = trend.points.reduce(
-              (sum, point) =>
-                sum + point.cache_read_tokens + point.cache_write_tokens,
-              0,
-            );
-            const cachePercent = trend.total_tokens
-              ? Math.round((cacheTokens / trend.total_tokens) * 100)
-              : 0;
-            const imagePath = await writeCodexUsageCard(status, {
-              ...options,
-              now: () => now,
-              trend,
-              trendTitle: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
-              trendSecondary: `RAW ${formatCompactCount(trend.total_tokens)}  CACHE ${cachePercent}%`,
-            });
-            richUi.rinCommandResult({
-              fallbackText,
-              parts: [
-                {
-                  type: "image",
-                  path: imagePath,
-                  mimeType: "image/png",
-                },
-              ],
-            });
-          } else {
-            ctx.ui.notify(fallbackText, "info");
-          }
+          ctx.ui.notify(renderCodexUsage(status), "info");
         } catch (error) {
           const message =
             error instanceof Error

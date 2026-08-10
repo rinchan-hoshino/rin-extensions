@@ -19,13 +19,12 @@ Owns the complete usage feature set removed from Rin core, narrowed to `openai-c
 - records Codex session, turn, message, tool, capability, token, cache, context, and cost events through Pi lifecycle hooks;
 - persists events under `~/.rin/data/extensions/codex-usage/usage.db` and migrates only Codex rows from the retired core database;
 - records official 5-hour and weekly `percent_left` snapshots and derives actual quota consumption from decreases within the same reset epoch;
-- reports actual processed token usage by default, using Pi's authoritative `totalTokens` and the normalized input/output/cache-read/cache-write components;
-- combines ChatGPT Codex quota status with a 7-day USD-equivalent usage-value chart in the `/usage` PNG, using Pi's model-aware `cost.total` so cached input is discounted while raw processed tokens and cache share remain visible as secondary context;
+- presents current ChatGPT Codex quota windows as a compact Codex-style text status with 20-segment remaining bars and reset times; `/usage` and bare `rin usage` share this result and do not render charts or images;
+- keeps actual processed token aggregates available through explicit report options, using Pi's authoritative `totalTokens` and the normalized input/output/cache-read/cache-write components;
 - keeps official quota snapshots as status/history available with `rin usage --quota`, while token aggregate/event queries remain available with all dimensions and filters;
-- uses the same data as a terminal text fallback;
 - is listed by `rin --help`, runs as `rin usage ...`, and documents its options through `rin usage --help`.
 
-The chart's USD figure is a cache- and model-adjusted usage equivalent from Pi telemetry, not an assertion that the subscription account was billed that amount. The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are intentionally absent.
+The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are intentionally absent.
 
 Examples:
 
