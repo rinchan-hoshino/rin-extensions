@@ -236,6 +236,7 @@ test("registers chat-capable /usage with Codex-style text and no chart result", 
     await command.handler("--help", ctx);
     assert.match(notices[0]?.[0] || "", /^Usage: rin usage/);
     assert.match(notices[0]?.[0] || "", /--group-by <dimensions>/);
+    assert.doesNotMatch(notices[0]?.[0] || "", /chart|USD equivalent/i);
     assert.equal(notices[0]?.[1], "info");
 
     notices.length = 0;

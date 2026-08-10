@@ -23,7 +23,7 @@ export function renderCodexUsageHelp(): string {
   return [
     "Usage: rin usage [options]",
     "",
-    "Show Codex quota status and the seven-day USD-equivalent usage chart.",
+    "Show current Codex quota status or query stored telemetry.",
     "",
     "Options:",
     "  --days <n>                 Query the last n days (default: 7)",
