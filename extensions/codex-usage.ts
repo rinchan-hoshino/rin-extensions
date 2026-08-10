@@ -4,8 +4,16 @@ import type {
   ExtensionFactory,
 } from "@earendil-works/pi-coding-agent";
 
+import {
+  writeCodexUsageCard,
+  type CodexUsageCardOptions,
+} from "./codex-usage-card.js";
 import { registerCodexTelemetry } from "./codex-usage-telemetry.js";
 import { resolveAgentDir } from "./codex-usage-store.js";
+import {
+  buildUsageTrendSeries,
+  formatCompactCount,
+} from "./codex-usage-trend.js";
 import { recordCodexQuotaSnapshot } from "./codex-quota-history.js";
 import {
   parseCodexUsageReportArgs,
@@ -32,10 +40,17 @@ export type {
 
 const CODEX_PROVIDER = "openai-codex";
 
-export type CodexUsageExtensionOptions = {
+export type CodexUsageExtensionOptions = CodexUsageCardOptions & {
   fetch?: FetchLike;
   agentDir?: string;
-  now?: () => Date;
+};
+
+type RinExtensionCommandResultUi = ExtensionCommandContext["ui"] & {
+  rinCommandResult?: (result: {
+    text?: string;
+    fallbackText?: string;
+    parts?: Array<Record<string, unknown>>;
+  }) => void;
 };
 
 function text(value: unknown): string {
@@ -146,7 +161,39 @@ export function createCodexUsageExtension(
           const status = await loadCodexUsage(ctx, options.fetch);
           const now = options.now?.() || new Date();
           recordCodexQuotaSnapshot(status, agentDir, now.toISOString());
-          ctx.ui.notify(renderCodexUsage(status), "info");
+          const fallbackText = renderCodexUsage(status);
+          const richUi = ctx.ui as RinExtensionCommandResultUi;
+          if (richUi.rinCommandResult) {
+            const trend =
+              options.trend || buildUsageTrendSeries(agentDir, { now });
+            const cacheTokens = trend.points.reduce(
+              (sum, point) =>
+                sum + point.cache_read_tokens + point.cache_write_tokens,
+              0,
+            );
+            const cachePercent = trend.total_tokens
+              ? Math.round((cacheTokens / trend.total_tokens) * 100)
+              : 0;
+            const imagePath = await writeCodexUsageCard(status, {
+              ...options,
+              now: () => now,
+              trend,
+              trendTitle: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
+              trendSecondary: `RAW ${formatCompactCount(trend.total_tokens)}  CACHE ${cachePercent}%`,
+            });
+            richUi.rinCommandResult({
+              fallbackText,
+              parts: [
+                {
+                  type: "image",
+                  path: imagePath,
+                  mimeType: "image/png",
+                },
+              ],
+            });
+          } else {
+            ctx.ui.notify(fallbackText, "info");
+          }
         } catch (error) {
           const message =
             error instanceof Error

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -9,6 +9,10 @@ import type {
   ExtensionAPI,
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import {
+  buildUsageCostTrendView,
+  buildTrendYAxisTicks,
+} from "../extensions/codex-usage-card.ts";
 import {
   createCodexUsageExtension,
   credentialFromAccessToken,
@@ -185,7 +189,31 @@ test("renders a compact text fallback without token history", () => {
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
 });
 
-test("registers chat-capable /usage with Codex-style text and no chart result", async () => {
+test("keeps the Chat chart on cache-adjusted USD-equivalent history", () => {
+  const view = buildUsageCostTrendView({
+    days: 7,
+    bucketHours: 3,
+    total_tokens: 158_684_617,
+    peak_total_tokens: 35_900_000,
+    total_cost: 167.7398,
+    peak_cost: 42.4,
+    points: [{ cost_total: 42.4 }, { cost_total: 0 }],
+  } as any);
+  assert.equal(view.title, "7D USAGE VALUE - 3H BUCKETS");
+  assert.equal(view.axisLabel, "USD/3H");
+  assert.equal(view.summary, "TOTAL $167.74  PEAK $42.40");
+  assert.deepEqual(view.values, [42.4, 0]);
+  assert.deepEqual(view.tickLabels, [
+    "$42.40",
+    "$31.80",
+    "$21.20",
+    "$10.60",
+    "$0.00",
+  ]);
+  assert.deepEqual(buildTrendYAxisTicks(20), [20, 15, 10, 5, 0]);
+});
+
+test("keeps CLI /usage textual while Chat /usage returns the PNG chart", async () => {
   let command: any;
   const pi = {
     on() {},
@@ -224,7 +252,25 @@ test("registers chat-capable /usage with Codex-style text and no chart result", 
   } as unknown as ExtensionCommandContext;
   try {
     await command.handler("", ctx);
-    assert.equal(richResults.length, 0);
+    assert.equal(notices.length, 0);
+    assert.match(
+      richResults[0]?.fallbackText || "",
+      /Weekly limit\n\[██████████░░░░░░░░░░\] 52% left/,
+    );
+    assert.doesNotMatch(
+      richResults[0]?.fallbackText || "",
+      /7d|USD equivalent|TOKENS\//i,
+    );
+    assert.equal(richResults[0]?.parts?.[0]?.type, "image");
+    assert.equal(richResults[0]?.parts?.[0]?.mimeType, "image/png");
+    assert.deepEqual(
+      [...(await readFile(richResults[0].parts[0].path)).subarray(0, 8)],
+      [137, 80, 78, 71, 13, 10, 26, 10],
+    );
+
+    richResults.length = 0;
+    delete (ctx.ui as any).rinCommandResult;
+    await command.handler("", ctx);
     assert.match(
       notices[0]?.[0] || "",
       /Weekly limit\n\[██████████░░░░░░░░░░\] 52% left/,

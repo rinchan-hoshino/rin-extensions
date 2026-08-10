@@ -19,7 +19,7 @@ Owns the complete usage feature set removed from Rin core, narrowed to `openai-c
 - records Codex session, turn, message, tool, capability, token, cache, context, and cost events through Pi lifecycle hooks;
 - persists events under `~/.rin/data/extensions/codex-usage/usage.db` and migrates only Codex rows from the retired core database;
 - records official 5-hour and weekly `percent_left` snapshots and derives actual quota consumption from decreases within the same reset epoch;
-- presents current ChatGPT Codex quota windows as a compact Codex-style text status with 20-segment remaining bars and reset times; `/usage` and bare `rin usage` share this result and do not render charts or images;
+- keeps bare `rin usage` as a compact Codex-style text status with 20-segment remaining bars and reset times, while Chat `/usage` returns the quota card with the 7-day USD-equivalent usage trend as a PNG and uses the same compact status as its text fallback;
 - keeps actual processed token aggregates available through explicit report options, using Pi's authoritative `totalTokens` and the normalized input/output/cache-read/cache-write components;
 - keeps official quota snapshots as status/history available with `rin usage --quota`, while token aggregate/event queries remain available with all dimensions and filters;
 - is listed by `rin --help`, runs as `rin usage ...`, and documents its options through `rin usage --help`.
