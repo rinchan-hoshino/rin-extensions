@@ -306,6 +306,12 @@ test("registers chat-capable /usage with rich image output and a native Pi text 
     assert.equal(notices[0]?.[1], "info");
 
     notices.length = 0;
+    await command.handler("--help", ctx);
+    assert.match(notices[0]?.[0] || "", /^Usage: rin usage/);
+    assert.match(notices[0]?.[0] || "", /--group-by <dimensions>/);
+    assert.equal(notices[0]?.[1], "info");
+
+    notices.length = 0;
     ctx.modelRegistry.getProviderAuth = async () => undefined;
     await command.handler("", ctx);
     assert.match(notices[0]?.[0] || "", /sign in to openai-codex first/);

@@ -19,6 +19,29 @@ export type CodexUsageReportOptions = {
   tokens: boolean;
 };
 
+export function renderCodexUsageHelp(): string {
+  return [
+    "Usage: rin usage [options]",
+    "",
+    "Show Codex quota status and the seven-day USD-equivalent usage chart.",
+    "",
+    "Options:",
+    "  --days <n>                 Query the last n days (default: 7)",
+    "  --all-time                Query all recorded telemetry",
+    "  --group-by <dimensions>   Group by comma-separated dimensions",
+    "  --filter <key=value>      Filter telemetry; may be repeated",
+    "  --events                  Show individual telemetry events",
+    "  --tokens                  Show token telemetry (default)",
+    "  --quota                   Show observed quota history",
+    "  --json                    Emit JSON",
+    "  --limit <n>               Limit event rows (default: 50)",
+    "  --order-by <field>        Choose aggregate sort field",
+    "  --asc | --desc            Choose sort direction",
+    "  --list-dimensions         List supported dimensions",
+    "  -h, --help                Show this help",
+  ].join("\n");
+}
+
 export function parseCodexUsageReportArgs(
   args: string,
 ): CodexUsageReportOptions {

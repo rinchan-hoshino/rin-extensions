@@ -18,6 +18,7 @@ import {
 import { recordCodexQuotaSnapshot } from "./codex-quota-history.js";
 import {
   parseCodexUsageReportArgs,
+  renderCodexUsageHelp,
   renderCodexUsageReport,
 } from "./codex-usage-report.js";
 import {
@@ -122,10 +123,14 @@ export function createCodexUsageExtension(
       captureQuota,
     });
     pi.registerCommand("usage", {
-      description: "Show ChatGPT Codex quota status",
+      description: "Show ChatGPT Codex usage and quota",
       chat: true,
       handler: async (args, ctx) => {
         try {
+          if (["-h", "--help"].includes(args.trim())) {
+            ctx.ui.notify(renderCodexUsageHelp(), "info");
+            return;
+          }
           if (args.trim()) {
             const report = renderCodexUsageReport(
               agentDir,

@@ -22,7 +22,8 @@ Owns the complete usage feature set removed from Rin core, narrowed to `openai-c
 - reports actual processed token usage by default, using Pi's authoritative `totalTokens` and the normalized input/output/cache-read/cache-write components;
 - combines ChatGPT Codex quota status with a 7-day USD-equivalent usage-value chart in the `/usage` PNG, using Pi's model-aware `cost.total` so cached input is discounted while raw processed tokens and cache share remain visible as secondary context;
 - keeps official quota snapshots as status/history available with `rin usage --quota`, while token aggregate/event queries remain available with all dimensions and filters;
-- uses the same data as a terminal text fallback.
+- uses the same data as a terminal text fallback;
+- is listed by `rin --help`, runs as `rin usage ...`, and documents its options through `rin usage --help`.
 
 The chart's USD figure is a cache- and model-adjusted usage equivalent from Pi telemetry, not an assertion that the subscription account was billed that amount. The store rejects non-Codex providers. Anthropic, Google, and Copilot probes are intentionally absent.
 
