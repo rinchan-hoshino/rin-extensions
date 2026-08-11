@@ -38,7 +38,7 @@ rin usage --list-dimensions
 
 ### `i18n`
 
-Owns the optional `~/.rin/i18n.json` Chat Bridge presentation catalog that was removed from Rin core. It reads command acknowledgements, compaction notices, and editable working frames, then publishes them through Rin's generic `rinChatPresentation` extension API. Missing or invalid values fall back to Rin's English defaults. `/reload` reapplies file changes without restarting the daemon.
+Owns the optional `~/.rin/i18n.json` Chat Bridge presentation catalog that was removed from Rin core. It reads command acknowledgements and compaction notices, owns the working-frame list and its active-agent animation timer, and publishes only the current `workingText` through Rin's generic `rinChatPresentation` extension API. Rin core never selects or rotates frames. Missing or invalid values fall back to Rin's English defaults. `/reload` reapplies file changes without restarting the daemon.
 
 Both nested JSON objects and the historical dotted keys remain accepted. The existing file location is unchanged, so extraction does not require a user-data migration.
 

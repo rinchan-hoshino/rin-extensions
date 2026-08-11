@@ -7,11 +7,12 @@ import test from "node:test";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 
 import i18nExtension, {
-  readChatPresentation,
+  readI18nCatalog,
   resolveI18nPath,
+  WORKING_ANIMATION_INTERVAL_MS,
 } from "../extensions/i18n.ts";
 
-test("i18n extension reads command responses and working frames from its catalog", async () => {
+test("i18n extension reads command responses and owns working animation frames", async () => {
   const agentDir = await mkdtemp(path.join(os.tmpdir(), "rin-i18n-extension-"));
   try {
     await writeFile(
@@ -25,7 +26,7 @@ test("i18n extension reads command responses and working frames from its catalog
         },
       }),
     );
-    assert.deepEqual(readChatPresentation(agentDir), {
+    assert.deepEqual(readI18nCatalog(agentDir), {
       commandResponses: {
         abort: "Stop",
         new: "New session",
@@ -36,7 +37,7 @@ test("i18n extension reads command responses and working frames from its catalog
       workingFrames: ["Working A", "Working B"],
     });
     await writeFile(resolveI18nPath(agentDir), "invalid");
-    assert.deepEqual(readChatPresentation(agentDir), {
+    assert.deepEqual(readI18nCatalog(agentDir), {
       commandResponses: {},
       workingFrames: [],
     });
@@ -45,24 +46,70 @@ test("i18n extension reads command responses and working frames from its catalog
   }
 });
 
-test("i18n extension publishes presentation on session start and resource reload", () => {
-  const handlers = new Map<string, Function>();
-  i18nExtension({
-    on(name: string, handler: Function) {
-      handlers.set(name, handler);
-    },
-  } as unknown as ExtensionAPI);
-  const published: unknown[] = [];
-  const ctx = {
-    rin: { agentDir: "/missing" },
-    ui: {
-      rinChatPresentation(value: unknown) {
-        published.push(value);
+test("i18n extension alone advances working text and clears its session timer", async (t) => {
+  const agentDir = await mkdtemp(path.join(os.tmpdir(), "rin-i18n-extension-"));
+  let intervalCallback: (() => void) | undefined;
+  const intervalToken = {} as NodeJS.Timeout;
+  const clearedTokens: NodeJS.Timeout[] = [];
+  t.mock.method(globalThis, "setInterval", ((
+    callback: () => void,
+    intervalMs: number,
+  ) => {
+    intervalCallback = callback;
+    assert.equal(intervalMs, WORKING_ANIMATION_INTERVAL_MS);
+    return intervalToken;
+  }) as typeof setInterval);
+  t.mock.method(globalThis, "clearInterval", ((token: NodeJS.Timeout) => {
+    clearedTokens.push(token);
+  }) as typeof clearInterval);
+
+  try {
+    await writeFile(
+      resolveI18nPath(agentDir),
+      JSON.stringify({
+        chat: {
+          commandResponses: { new: "New session" },
+          runtime: { working: { frames: ["Working A", "Working B"] } },
+        },
+      }),
+    );
+    const handlers = new Map<string, Function>();
+    i18nExtension({
+      on(name: string, handler: Function) {
+        handlers.set(name, handler);
       },
-    },
-  };
-  handlers.get("session_start")?.({}, ctx);
-  handlers.get("resources_discover")?.({}, ctx);
-  assert.equal(published.length, 2);
-  assert.deepEqual(published[0], { commandResponses: {}, workingFrames: [] });
+    } as unknown as ExtensionAPI);
+    const published: unknown[] = [];
+    const ctx = {
+      rin: { agentDir },
+      ui: {
+        rinChatPresentation(value: unknown) {
+          published.push(value);
+        },
+      },
+    };
+
+    handlers.get("session_start")?.({}, ctx);
+    assert.deepEqual(published, [
+      { commandResponses: { new: "New session" }, workingText: "Working A" },
+    ]);
+    handlers.get("agent_start")?.({}, ctx);
+    assert.equal(typeof intervalCallback, "function");
+    intervalCallback?.();
+    intervalCallback?.();
+    assert.deepEqual(published.slice(-2), [
+      { commandResponses: { new: "New session" }, workingText: "Working B" },
+      { commandResponses: { new: "New session" }, workingText: "Working A" },
+    ]);
+
+    handlers.get("agent_settled")?.({}, ctx);
+    assert.deepEqual(clearedTokens, [intervalToken]);
+
+    handlers.get("agent_start")?.({}, ctx);
+    handlers.get("session_shutdown")?.({}, ctx);
+    assert.deepEqual(clearedTokens, [intervalToken, intervalToken]);
+    assert.equal(handlers.has("resources_discover"), false);
+  } finally {
+    await rm(agentDir, { recursive: true, force: true });
+  }
 });

@@ -9,7 +9,12 @@ import type {
 
 type ChatPresentation = {
   commandResponses?: Record<string, string>;
-  workingFrames?: string[];
+  workingText?: string;
+};
+
+type I18nCatalog = {
+  commandResponses: Record<string, string>;
+  workingFrames: string[];
 };
 
 type RinPresentationContext = ExtensionContext & {
@@ -28,6 +33,8 @@ const COMMAND_RESPONSE_PATHS: Record<string, string[]> = {
   compactionSummaryLine: ["chat", "compaction", "summaryLine"],
   compactionSummaryText: ["chat", "compaction", "summaryText"],
 };
+
+export const WORKING_ANIMATION_INTERVAL_MS = 30_000;
 
 function text(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
@@ -56,7 +63,7 @@ export function resolveI18nPath(agentDir = ""): string {
   return path.join(root, "i18n.json");
 }
 
-export function readChatPresentation(agentDir = ""): ChatPresentation {
+export function readI18nCatalog(agentDir = ""): I18nCatalog {
   let raw: unknown = {};
   try {
     raw = JSON.parse(fs.readFileSync(resolveI18nPath(agentDir), "utf8"));
@@ -80,14 +87,55 @@ export function readChatPresentation(agentDir = ""): ChatPresentation {
   return { commandResponses, workingFrames };
 }
 
-function publishPresentation(ctx: ExtensionContext): void {
+function publishWorkingFrame(
+  ctx: ExtensionContext,
+  catalog: I18nCatalog,
+  frameIndex: number,
+): void {
   const typed = ctx as RinPresentationContext;
-  typed.ui.rinChatPresentation?.(
-    readChatPresentation(text(typed.rin?.agentDir)),
-  );
+  typed.ui.rinChatPresentation?.({
+    commandResponses: catalog.commandResponses,
+    workingText: catalog.workingFrames[frameIndex],
+  });
 }
 
 export default function i18nExtension(pi: ExtensionAPI): void {
-  pi.on("session_start", (_event, ctx) => publishPresentation(ctx));
-  pi.on("resources_discover", (_event, ctx) => publishPresentation(ctx));
+  let catalog: I18nCatalog = { commandResponses: {}, workingFrames: [] };
+  let activeContext: ExtensionContext | null = null;
+  let frameIndex = 0;
+  let animationTimer: ReturnType<typeof setInterval> | null = null;
+
+  const stopAnimation = () => {
+    if (!animationTimer) return;
+    clearInterval(animationTimer);
+    animationTimer = null;
+  };
+
+  pi.on("session_start", (_event, ctx) => {
+    stopAnimation();
+    activeContext = ctx;
+    frameIndex = 0;
+    const typed = ctx as RinPresentationContext;
+    catalog = readI18nCatalog(text(typed.rin?.agentDir));
+    publishWorkingFrame(ctx, catalog, frameIndex);
+  });
+
+  pi.on("agent_start", (_event, ctx) => {
+    stopAnimation();
+    activeContext = ctx;
+    frameIndex = 0;
+    publishWorkingFrame(ctx, catalog, frameIndex);
+    if (catalog.workingFrames.length <= 1) return;
+    animationTimer = setInterval(() => {
+      if (!activeContext) return;
+      frameIndex = (frameIndex + 1) % catalog.workingFrames.length;
+      publishWorkingFrame(activeContext, catalog, frameIndex);
+    }, WORKING_ANIMATION_INTERVAL_MS);
+  });
+
+  pi.on("agent_settled", () => stopAnimation());
+  pi.on("session_shutdown", () => {
+    stopAnimation();
+    activeContext = null;
+  });
 }
