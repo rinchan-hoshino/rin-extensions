@@ -93,10 +93,20 @@ test("i18n extension alone advances working text and clears its session timer", 
     assert.deepEqual(published, [
       { commandResponses: { new: "New session" }, workingText: "Working A" },
     ]);
+    published.length = 0;
+    handlers.get("resources_discover")?.({}, ctx);
+    handlers.get("input")?.({}, ctx);
+    assert.deepEqual(published, [
+      { commandResponses: { new: "New session" }, workingText: "Working A" },
+      { commandResponses: { new: "New session" }, workingText: "Working A" },
+    ]);
+    assert.equal(intervalCallback, undefined);
+
     handlers.get("agent_start")?.({}, ctx);
     assert.equal(typeof intervalCallback, "function");
-    intervalCallback?.();
-    intervalCallback?.();
+    const tick = intervalCallback as unknown as () => void;
+    tick();
+    tick();
     assert.deepEqual(published.slice(-2), [
       { commandResponses: { new: "New session" }, workingText: "Working B" },
       { commandResponses: { new: "New session" }, workingText: "Working A" },
@@ -108,7 +118,8 @@ test("i18n extension alone advances working text and clears its session timer", 
     handlers.get("agent_start")?.({}, ctx);
     handlers.get("session_shutdown")?.({}, ctx);
     assert.deepEqual(clearedTokens, [intervalToken, intervalToken]);
-    assert.equal(handlers.has("resources_discover"), false);
+    assert.equal(handlers.has("resources_discover"), true);
+    assert.equal(handlers.has("input"), true);
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }

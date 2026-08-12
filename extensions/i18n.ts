@@ -110,21 +110,25 @@ export default function i18nExtension(pi: ExtensionAPI): void {
     clearInterval(animationTimer);
     animationTimer = null;
   };
+  const publishCurrentFrame = (ctx: ExtensionContext) => {
+    activeContext = ctx;
+    publishWorkingFrame(ctx, catalog, frameIndex);
+  };
 
   pi.on("session_start", (_event, ctx) => {
     stopAnimation();
-    activeContext = ctx;
     frameIndex = 0;
     const typed = ctx as RinPresentationContext;
     catalog = readI18nCatalog(text(typed.rin?.agentDir));
-    publishWorkingFrame(ctx, catalog, frameIndex);
+    publishCurrentFrame(ctx);
   });
+  pi.on("resources_discover", (_event, ctx) => publishCurrentFrame(ctx));
+  pi.on("input", (_event, ctx) => publishCurrentFrame(ctx));
 
   pi.on("agent_start", (_event, ctx) => {
     stopAnimation();
-    activeContext = ctx;
     frameIndex = 0;
-    publishWorkingFrame(ctx, catalog, frameIndex);
+    publishCurrentFrame(ctx);
     if (catalog.workingFrames.length <= 1) return;
     animationTimer = setInterval(() => {
       if (!activeContext) return;
