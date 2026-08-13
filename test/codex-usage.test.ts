@@ -235,14 +235,20 @@ test("keeps fourteen daily points readable with seven representative date labels
   } as any);
   assert.equal(view.values.length, 14);
   assert.deepEqual(view.xAxisLabels, [
-    { index: 0, label: "08/01" },
-    { index: 2, label: "08/03" },
-    { index: 4, label: "08/05" },
+    { index: 1, label: "08/02" },
+    { index: 3, label: "08/04" },
+    { index: 5, label: "08/06" },
     { index: 7, label: "08/08" },
     { index: 9, label: "08/10" },
     { index: 11, label: "08/12" },
     { index: 13, label: "08/14" },
   ]);
+  assert.deepEqual(
+    view.xAxisLabels
+      .slice(1)
+      .map((label, index) => label.index - view.xAxisLabels[index].index),
+    [2, 2, 2, 2, 2, 2],
+  );
 });
 
 test("keeps CLI /usage textual while Chat /usage returns the PNG chart", async () => {

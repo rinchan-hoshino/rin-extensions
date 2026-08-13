@@ -205,13 +205,14 @@ export function buildUsageCostTrendView(trend: UsageTrendSeries) {
     formatTrendDateLabel(point.timestamp),
   );
   const xAxisLabelCount = Math.min(7, dateLabels.length);
+  const xAxisLabelStep = Math.max(
+    1,
+    Math.floor(dateLabels.length / xAxisLabelCount),
+  );
+  const xAxisLabelStart =
+    dateLabels.length - 1 - xAxisLabelStep * (xAxisLabelCount - 1);
   const xAxisLabels = Array.from({ length: xAxisLabelCount }, (_, position) => {
-    const index =
-      xAxisLabelCount <= 1
-        ? 0
-        : Math.round(
-            (position * (dateLabels.length - 1)) / (xAxisLabelCount - 1),
-          );
+    const index = xAxisLabelStart + position * xAxisLabelStep;
     return { index, label: dateLabels[index] };
   });
   return {
