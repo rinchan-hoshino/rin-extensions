@@ -820,6 +820,7 @@ export function getTokenUsageOverview(
 
 const DIMENSIONS = {
   day: buildDimension(`substr(timestamp, 1, 10)`),
+  local_day: buildDimension(`date(timestamp, 'localtime')`),
   hour: buildDimension(`substr(timestamp, 1, 13) || ':00'`),
   session: buildDimension(SESSION_DIMENSION_EXPR),
   session_id: textDimension(`session_id`),

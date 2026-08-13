@@ -22,7 +22,7 @@ export type UsageTrendSeries = {
   start: string;
   end: string;
   days: number;
-  bucketHours: number;
+  bucket: "day";
   points: UsageTrendPoint[];
   total_tokens: number;
   peak_total_tokens: number;
@@ -33,12 +33,9 @@ export type UsageTrendSeries = {
 export type UsageTrendOptions = {
   now?: Date | string | number;
   days?: number;
-  bucketHours?: number;
 };
 
 const DEFAULT_USAGE_TREND_DAYS = 7;
-const DEFAULT_USAGE_TREND_BUCKET_HOURS = 3;
-const USAGE_TREND_MAX_POINTS = 72;
 
 function clampNumber(
   value: unknown,
@@ -66,27 +63,22 @@ function toIso(ms: number) {
   return new Date(ms).toISOString();
 }
 
-function parseHourBucketMs(value: unknown) {
-  const text = safeString(value).trim();
-  if (!text) return Number.NaN;
-  const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text)
-    ? `${text}:00.000Z`
-    : text;
-  return Date.parse(normalized);
+function localDateKey(value: Date): string {
+  return [
+    value.getFullYear(),
+    String(value.getMonth() + 1).padStart(2, "0"),
+    String(value.getDate()).padStart(2, "0"),
+  ].join("-");
 }
 
-function computeTrendRange(nowMs: number, days: number, bucketHours: number) {
-  const bucketMs = bucketHours * 3_600_000;
-  const windowStartMs = nowMs - days * 24 * 3_600_000;
-  const startMs = Math.floor(windowStartMs / bucketMs) * bucketMs;
-  const endMs = Math.floor(nowMs / bucketMs) * bucketMs;
-  return {
-    bucketMs,
-    windowStartMs,
-    startMs,
-    endMs,
-    pointCount: Math.max(1, Math.floor((endMs - startMs) / bucketMs) + 1),
-  };
+function buildLocalDateKeys(nowMs: number, days: number): string[] {
+  const current = new Date(nowMs);
+  current.setHours(12, 0, 0, 0);
+  return Array.from({ length: days }, (_, index) => {
+    const date = new Date(current);
+    date.setDate(current.getDate() - (days - index - 1));
+    return localDateKey(date);
+  });
 }
 
 function emptyTrendPoint(timestamp: string): UsageTrendPoint {
@@ -124,38 +116,28 @@ export function buildUsageTrendSeries(
   options: UsageTrendOptions = {},
 ): UsageTrendSeries {
   const days = clampNumber(options.days, DEFAULT_USAGE_TREND_DAYS, 1, 31);
-  let bucketHours = clampNumber(
-    options.bucketHours,
-    DEFAULT_USAGE_TREND_BUCKET_HOURS,
-    1,
-    24,
-  );
   const nowMs = normalizeNowMs(options.now);
-  let range = computeTrendRange(nowMs, days, bucketHours);
-  while (range.pointCount > USAGE_TREND_MAX_POINTS && bucketHours < 24) {
-    bucketHours += 1;
-    range = computeTrendRange(nowMs, days, bucketHours);
-  }
-  const points = Array.from({ length: range.pointCount }, (_, index) =>
-    emptyTrendPoint(toIso(range.startMs + index * range.bucketMs)),
+  const dateKeys = buildLocalDateKeys(nowMs, days);
+  const points = dateKeys.map(emptyTrendPoint);
+  const pointsByDate = new Map(
+    points.map((point) => [point.timestamp, point] as const),
   );
 
+  // Include a two-day margin so the first local calendar day remains complete
+  // for every UTC offset and across a daylight-saving transition.
   const rows = queryTokenUsageAggregate({
     agentDir,
-    from: toIso(range.windowStartMs),
+    from: toIso(nowMs - (days + 2) * 24 * 3_600_000),
     to: toIso(nowMs),
-    groupBy: ["hour"],
-    limit: Math.min(1_000, days * 24 + 24),
-    orderBy: "hour",
+    groupBy: ["local_day"],
+    limit: days + 3,
+    orderBy: "local_day",
     direction: "asc",
     includeZero: true,
   });
   for (const row of rows) {
-    const hourMs = parseHourBucketMs(row.hour);
-    if (!Number.isFinite(hourMs)) continue;
-    const index = Math.floor((hourMs - range.startMs) / range.bucketMs);
-    if (index < 0 || index >= points.length) continue;
-    addTrendMetric(points[index], row);
+    const point = pointsByDate.get(safeString(row.local_day).trim());
+    if (point) addTrendMetric(point, row);
   }
 
   const total = points.reduce((sum, point) => sum + point.total_tokens, 0);
@@ -164,10 +146,10 @@ export function buildUsageTrendSeries(
   const peakCost = Math.max(0, ...points.map((point) => point.cost_total));
   return {
     generatedAt: toIso(nowMs),
-    start: toIso(range.startMs),
-    end: toIso(range.endMs),
+    start: dateKeys[0],
+    end: dateKeys.at(-1) || dateKeys[0],
     days,
-    bucketHours,
+    bucket: "day",
     points,
     total_tokens: total,
     peak_total_tokens: peak,

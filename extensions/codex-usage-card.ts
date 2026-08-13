@@ -194,13 +194,21 @@ export function buildTrendYAxisTicks(maximum: number, divisions = 4): number[] {
   );
 }
 
+function formatTrendDateLabel(value: string): string {
+  const match = /^(?:\d{4})-(\d{2})-(\d{2})/.exec(value);
+  return match ? `${match[1]}/${match[2]}` : value;
+}
+
 export function buildUsageCostTrendView(trend: UsageTrendSeries) {
   const ticks = buildTrendYAxisTicks(trend.peak_cost);
   return {
-    title: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
-    axisLabel: `USD/${trend.bucketHours}H`,
+    title: `${trend.days}D USAGE VALUE - DAILY`,
+    axisLabel: "USD/DAY",
     summary: `TOTAL ${formatUsdEquivalent(trend.total_cost)}  PEAK ${formatUsdEquivalent(trend.peak_cost)}`,
     values: trend.points.map((point) => point.cost_total),
+    dateLabels: trend.points.map((point) =>
+      formatTrendDateLabel(point.timestamp),
+    ),
     ticks,
     tickLabels: ticks.map(formatUsdEquivalent),
   };
@@ -468,24 +476,16 @@ export function renderCodexUsageCardPng(
         3,
       );
     }
-    drawText(
-      pixels,
-      height,
-      "7D AGO",
-      chartX,
-      chartY + chartHeight + 14,
-      2,
-      muted,
-    );
-    drawText(
-      pixels,
-      height,
-      "NOW",
-      chartX + chartWidth - 34,
-      chartY + chartHeight + 14,
-      2,
-      muted,
-    );
+    const labelDenominator = Math.max(1, costView.dateLabels.length - 1);
+    for (const [index, label] of costView.dateLabels.entries()) {
+      const centerX = chartX + (index / labelDenominator) * chartWidth;
+      const labelWidth = label.length * 12;
+      const x = Math.max(
+        chartX,
+        Math.min(chartX + chartWidth - labelWidth, centerX - labelWidth / 2),
+      );
+      drawText(pixels, height, label, x, chartY + chartHeight + 14, 2, muted);
+    }
     footerTop += trendHeight;
   }
 

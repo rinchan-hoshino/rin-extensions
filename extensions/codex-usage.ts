@@ -178,7 +178,6 @@ export function createCodexUsageExtension(
               ...options,
               now: () => now,
               trend,
-              trendTitle: `7D USAGE VALUE - ${trend.bucketHours}H BUCKETS`,
               trendSecondary: `RAW ${formatCompactCount(trend.total_tokens)}  CACHE ${cachePercent}%`,
             });
             richUi.rinCommandResult({

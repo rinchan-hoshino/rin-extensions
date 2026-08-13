@@ -189,20 +189,24 @@ test("renders a compact text fallback without token history", () => {
   assert.doesNotMatch(output, /Anthropic|Gemini|Copilot/);
 });
 
-test("keeps the Chat chart on cache-adjusted USD-equivalent history", () => {
+test("shows daily cache-adjusted USD history with dates on the x-axis", () => {
   const view = buildUsageCostTrendView({
     days: 7,
-    bucketHours: 3,
+    bucket: "day",
     total_tokens: 158_684_617,
     peak_total_tokens: 35_900_000,
     total_cost: 167.7398,
     peak_cost: 42.4,
-    points: [{ cost_total: 42.4 }, { cost_total: 0 }],
+    points: [
+      { timestamp: "2026-08-12", cost_total: 42.4 },
+      { timestamp: "2026-08-13", cost_total: 0 },
+    ],
   } as any);
-  assert.equal(view.title, "7D USAGE VALUE - 3H BUCKETS");
-  assert.equal(view.axisLabel, "USD/3H");
+  assert.equal(view.title, "7D USAGE VALUE - DAILY");
+  assert.equal(view.axisLabel, "USD/DAY");
   assert.equal(view.summary, "TOTAL $167.74  PEAK $42.40");
   assert.deepEqual(view.values, [42.4, 0]);
+  assert.deepEqual(view.dateLabels, ["08/12", "08/13"]);
   assert.deepEqual(view.tickLabels, [
     "$42.40",
     "$31.80",
