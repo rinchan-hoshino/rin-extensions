@@ -18,7 +18,7 @@ function localDateKey(value: Date): string {
   ].join("-");
 }
 
-test("default usage trend groups the latest seven local calendar days", async () => {
+test("default usage trend groups the latest fourteen local calendar days", async () => {
   const agentDir = await mkdtemp(path.join(os.tmpdir(), "codex-usage-trend-"));
   const now = new Date(2026, 7, 13, 12, 0, 0, 0);
   const previousDay = new Date(2026, 7, 12, 23, 30, 0, 0);
@@ -49,8 +49,8 @@ test("default usage trend groups the latest seven local calendar days", async ()
 
     const trend = buildUsageTrendSeries(agentDir, { now });
     assert.equal(trend.bucket, "day");
-    assert.equal(trend.points.length, 7);
-    assert.equal(trend.start, localDateKey(new Date(2026, 7, 7, 12)));
+    assert.equal(trend.points.length, 14);
+    assert.equal(trend.start, localDateKey(new Date(2026, 6, 31, 12)));
     assert.equal(trend.end, localDateKey(now));
     assert.deepEqual(
       trend.points.slice(-2).map((point) => ({

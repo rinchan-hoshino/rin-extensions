@@ -207,6 +207,10 @@ test("shows daily cache-adjusted USD history with dates on the x-axis", () => {
   assert.equal(view.summary, "TOTAL $167.74  PEAK $42.40");
   assert.deepEqual(view.values, [42.4, 0]);
   assert.deepEqual(view.dateLabels, ["08/12", "08/13"]);
+  assert.deepEqual(view.xAxisLabels, [
+    { index: 0, label: "08/12" },
+    { index: 1, label: "08/13" },
+  ]);
   assert.deepEqual(view.tickLabels, [
     "$42.40",
     "$31.80",
@@ -215,6 +219,30 @@ test("shows daily cache-adjusted USD history with dates on the x-axis", () => {
     "$0.00",
   ]);
   assert.deepEqual(buildTrendYAxisTicks(20), [20, 15, 10, 5, 0]);
+});
+
+test("keeps fourteen daily points readable with seven representative date labels", () => {
+  const points = Array.from({ length: 14 }, (_, index) => ({
+    timestamp: `2026-08-${String(index + 1).padStart(2, "0")}`,
+    cost_total: index,
+  }));
+  const view = buildUsageCostTrendView({
+    days: 14,
+    bucket: "day",
+    total_cost: 91,
+    peak_cost: 13,
+    points,
+  } as any);
+  assert.equal(view.values.length, 14);
+  assert.deepEqual(view.xAxisLabels, [
+    { index: 0, label: "08/01" },
+    { index: 2, label: "08/03" },
+    { index: 4, label: "08/05" },
+    { index: 7, label: "08/08" },
+    { index: 9, label: "08/10" },
+    { index: 11, label: "08/12" },
+    { index: 13, label: "08/14" },
+  ]);
 });
 
 test("keeps CLI /usage textual while Chat /usage returns the PNG chart", async () => {

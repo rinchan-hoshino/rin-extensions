@@ -1,6 +1,6 @@
 {
   "name": "@rinchan-hoshino/rin-extensions",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "private": true,
   "description": "First-party optional extensions for Rin and Pi",
   "type": "module",

@@ -201,14 +201,26 @@ function formatTrendDateLabel(value: string): string {
 
 export function buildUsageCostTrendView(trend: UsageTrendSeries) {
   const ticks = buildTrendYAxisTicks(trend.peak_cost);
+  const dateLabels = trend.points.map((point) =>
+    formatTrendDateLabel(point.timestamp),
+  );
+  const xAxisLabelCount = Math.min(7, dateLabels.length);
+  const xAxisLabels = Array.from({ length: xAxisLabelCount }, (_, position) => {
+    const index =
+      xAxisLabelCount <= 1
+        ? 0
+        : Math.round(
+            (position * (dateLabels.length - 1)) / (xAxisLabelCount - 1),
+          );
+    return { index, label: dateLabels[index] };
+  });
   return {
     title: `${trend.days}D USAGE VALUE - DAILY`,
     axisLabel: "USD/DAY",
     summary: `TOTAL ${formatUsdEquivalent(trend.total_cost)}  PEAK ${formatUsdEquivalent(trend.peak_cost)}`,
     values: trend.points.map((point) => point.cost_total),
-    dateLabels: trend.points.map((point) =>
-      formatTrendDateLabel(point.timestamp),
-    ),
+    dateLabels,
+    xAxisLabels,
     ticks,
     tickLabels: ticks.map(formatUsdEquivalent),
   };
@@ -476,8 +488,8 @@ export function renderCodexUsageCardPng(
         3,
       );
     }
-    const labelDenominator = Math.max(1, costView.dateLabels.length - 1);
-    for (const [index, label] of costView.dateLabels.entries()) {
+    const labelDenominator = Math.max(1, costView.values.length - 1);
+    for (const { index, label } of costView.xAxisLabels) {
       const centerX = chartX + (index / labelDenominator) * chartWidth;
       const labelWidth = label.length * 12;
       const x = Math.max(

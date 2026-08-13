@@ -35,7 +35,7 @@ export type UsageTrendOptions = {
   days?: number;
 };
 
-const DEFAULT_USAGE_TREND_DAYS = 7;
+const DEFAULT_USAGE_TREND_DAYS = 14;
 
 function clampNumber(
   value: unknown,
