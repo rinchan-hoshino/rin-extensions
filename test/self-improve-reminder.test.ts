@@ -1,3 +1,4 @@
+import "./require-test-sandbox.ts";
 import assert from "node:assert/strict";
 import {
   mkdir,
