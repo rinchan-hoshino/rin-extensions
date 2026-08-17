@@ -12,7 +12,7 @@ import i18nExtension, {
   WORKING_ANIMATION_INTERVAL_MS,
 } from "../extensions/i18n.ts";
 
-test("i18n extension reads command responses and owns working animation frames", async () => {
+test("i18n extension reads semantic messages and owns working animation frames", async () => {
   const agentDir = await mkdtemp(path.join(os.tmpdir(), "rin-i18n-extension-"));
   try {
     await writeFile(
@@ -27,18 +27,18 @@ test("i18n extension reads command responses and owns working animation frames",
       }),
     );
     assert.deepEqual(readI18nCatalog(agentDir), {
-      commandResponses: {
-        abort: "Stop",
-        new: "New session",
-        reload: "Reloaded",
-        compactionStart: "Compact",
-        compactionSummaryLine: "Done {tokens}",
+      messages: {
+        "command.abort.completed": "Stop",
+        "session.new.completed": "New session",
+        "extensions.reload.completed": "Reloaded",
+        "session.compaction.started": "Compact",
+        "session.compaction.summary": "Done {tokens}",
       },
       workingFrames: ["Working A", "Working B"],
     });
     await writeFile(resolveI18nPath(agentDir), "invalid");
     assert.deepEqual(readI18nCatalog(agentDir), {
-      commandResponses: {},
+      messages: {},
       workingFrames: [],
     });
   } finally {
@@ -79,27 +79,34 @@ test("i18n extension alone advances working text and clears its session timer", 
         handlers.set(name, handler);
       },
     } as unknown as ExtensionAPI);
-    const published: unknown[] = [];
+    const messageCatalogs: unknown[] = [];
+    const workingMessages: unknown[] = [];
     const ctx = {
       rin: { agentDir },
       ui: {
-        rinChatPresentation(value: unknown) {
-          published.push(value);
+        setMessageCatalog(value: unknown) {
+          messageCatalogs.push(value);
+        },
+        setWorkingMessage(value: unknown) {
+          workingMessages.push(value);
         },
       },
     };
 
     handlers.get("session_start")?.({}, ctx);
-    assert.deepEqual(published, [
-      { commandResponses: { new: "New session" }, workingText: "Working A" },
+    assert.deepEqual(messageCatalogs, [
+      { "session.new.completed": "New session" },
     ]);
-    published.length = 0;
+    assert.deepEqual(workingMessages, ["Working A"]);
+    messageCatalogs.length = 0;
+    workingMessages.length = 0;
     handlers.get("resources_discover")?.({}, ctx);
     handlers.get("input")?.({}, ctx);
-    assert.deepEqual(published, [
-      { commandResponses: { new: "New session" }, workingText: "Working A" },
-      { commandResponses: { new: "New session" }, workingText: "Working A" },
+    assert.deepEqual(messageCatalogs, [
+      { "session.new.completed": "New session" },
+      { "session.new.completed": "New session" },
     ]);
+    assert.deepEqual(workingMessages, ["Working A", "Working A"]);
     assert.equal(intervalCallback, undefined);
 
     handlers.get("agent_start")?.({}, ctx);
@@ -107,10 +114,7 @@ test("i18n extension alone advances working text and clears its session timer", 
     const tick = intervalCallback as unknown as () => void;
     tick();
     tick();
-    assert.deepEqual(published.slice(-2), [
-      { commandResponses: { new: "New session" }, workingText: "Working B" },
-      { commandResponses: { new: "New session" }, workingText: "Working A" },
-    ]);
+    assert.deepEqual(workingMessages.slice(-2), ["Working B", "Working A"]);
 
     handlers.get("agent_settled")?.({}, ctx);
     assert.deepEqual(clearedTokens, [intervalToken]);
@@ -118,8 +122,7 @@ test("i18n extension alone advances working text and clears its session timer", 
     handlers.get("agent_start")?.({}, ctx);
     handlers.get("session_shutdown")?.({}, ctx);
     assert.deepEqual(clearedTokens, [intervalToken, intervalToken]);
-    assert.equal(handlers.has("resources_discover"), true);
-    assert.equal(handlers.has("input"), true);
+    assert.equal(messageCatalogs.length, 2);
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }

@@ -38,7 +38,7 @@ rin usage --list-dimensions
 
 ### `i18n`
 
-Owns the optional `~/.rin/i18n.json` Chat Bridge presentation catalog that was removed from Rin core. It reads command acknowledgements and compaction notices, owns the working-frame list and its active-agent animation timer, and publishes only the current `workingText` through Rin's generic `rinChatPresentation` extension API. Rin core never selects or rotates frames. Missing or invalid values fall back to Rin's English defaults. `/reload` reapplies file changes without restarting the daemon.
+Owns the optional `~/.rin/i18n.json` message catalog that was removed from Rin core. It publishes one complete semantic message catalog through Rin's `setMessageCatalog` capability, then drives the active Working frame through Pi's native `setWorkingMessage` API. Rin core owns lifecycle facts and frontend chrome but never selects or rotates animation frames. Missing or invalid catalog values fall back to each frontend's built-in English presentation. `/reload` reapplies file changes without restarting the daemon.
 
 Both nested JSON objects and the historical dotted keys remain accepted. The existing file location is unchanged, so extraction does not require a user-data migration.
 

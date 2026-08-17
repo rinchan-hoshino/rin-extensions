@@ -7,31 +7,39 @@ import type {
   ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 
-type ChatPresentation = {
-  commandResponses?: Record<string, string>;
-  workingText?: string;
-};
+type RinMessageKey =
+  | "command.abort.completed"
+  | "session.new.completed"
+  | "session.new.cancelled"
+  | "session.compaction.completed"
+  | "extensions.reload.completed"
+  | "session.compaction.busy"
+  | "session.compaction.started"
+  | "session.compaction.summary";
 
 type I18nCatalog = {
-  commandResponses: Record<string, string>;
+  messages: Partial<Record<RinMessageKey, string>>;
   workingFrames: string[];
 };
 
 type RinPresentationContext = ExtensionContext & {
   rin?: { agentDir?: string };
   ui: ExtensionContext["ui"] & {
-    rinChatPresentation?: (presentation: ChatPresentation) => void;
+    setMessageCatalog?: (
+      catalog: Partial<Record<RinMessageKey, string>>,
+    ) => void;
   };
 };
 
-const COMMAND_RESPONSE_PATHS: Record<string, string[]> = {
-  abort: ["chat", "commandResponses", "abort"],
-  new: ["chat", "commandResponses", "new"],
-  newCancelled: ["chat", "commandResponses", "newCancelled"],
-  reload: ["chat", "commandResponses", "reload"],
-  compactionStart: ["chat", "compaction", "start"],
-  compactionSummaryLine: ["chat", "compaction", "summaryLine"],
-  compactionSummaryText: ["chat", "compaction", "summaryText"],
+const MESSAGE_PATHS: Record<RinMessageKey, string[]> = {
+  "command.abort.completed": ["chat", "commandResponses", "abort"],
+  "session.new.completed": ["chat", "commandResponses", "new"],
+  "session.new.cancelled": ["chat", "commandResponses", "newCancelled"],
+  "session.compaction.completed": ["chat", "commandResponses", "compact"],
+  "extensions.reload.completed": ["chat", "commandResponses", "reload"],
+  "session.compaction.busy": ["chat", "compaction", "busy"],
+  "session.compaction.started": ["chat", "compaction", "start"],
+  "session.compaction.summary": ["chat", "compaction", "summaryLine"],
 };
 
 export const WORKING_ANIMATION_INTERVAL_MS = 30_000;
@@ -68,11 +76,11 @@ export function readI18nCatalog(agentDir = ""): I18nCatalog {
   try {
     raw = JSON.parse(fs.readFileSync(resolveI18nPath(agentDir), "utf8"));
   } catch {}
-  const commandResponses = Object.fromEntries(
-    Object.entries(COMMAND_RESPONSE_PATHS)
+  const messages = Object.fromEntries(
+    Object.entries(MESSAGE_PATHS)
       .map(([key, keys]) => [key, text(valueAtPath(raw, keys))])
       .filter(([, value]) => value),
-  );
+  ) as Partial<Record<RinMessageKey, string>>;
   const framesValue = valueAtPath(raw, [
     "chat",
     "runtime",
@@ -84,7 +92,7 @@ export function readI18nCatalog(agentDir = ""): I18nCatalog {
   )
     .map(text)
     .filter(Boolean);
-  return { commandResponses, workingFrames };
+  return { messages, workingFrames };
 }
 
 function publishWorkingFrame(
@@ -92,15 +100,11 @@ function publishWorkingFrame(
   catalog: I18nCatalog,
   frameIndex: number,
 ): void {
-  const typed = ctx as RinPresentationContext;
-  typed.ui.rinChatPresentation?.({
-    commandResponses: catalog.commandResponses,
-    workingText: catalog.workingFrames[frameIndex],
-  });
+  ctx.ui.setWorkingMessage(catalog.workingFrames[frameIndex]);
 }
 
 export default function i18nExtension(pi: ExtensionAPI): void {
-  let catalog: I18nCatalog = { commandResponses: {}, workingFrames: [] };
+  let catalog: I18nCatalog = { messages: {}, workingFrames: [] };
   let activeContext: ExtensionContext | null = null;
   let frameIndex = 0;
   let animationTimer: ReturnType<typeof setInterval> | null = null;
@@ -114,16 +118,21 @@ export default function i18nExtension(pi: ExtensionAPI): void {
     activeContext = ctx;
     publishWorkingFrame(ctx, catalog, frameIndex);
   };
+  const publishPresentation = (ctx: ExtensionContext) => {
+    const typed = ctx as RinPresentationContext;
+    typed.ui.setMessageCatalog?.(catalog.messages);
+    publishCurrentFrame(ctx);
+  };
 
   pi.on("session_start", (_event, ctx) => {
     stopAnimation();
     frameIndex = 0;
     const typed = ctx as RinPresentationContext;
     catalog = readI18nCatalog(text(typed.rin?.agentDir));
-    publishCurrentFrame(ctx);
+    publishPresentation(ctx);
   });
-  pi.on("resources_discover", (_event, ctx) => publishCurrentFrame(ctx));
-  pi.on("input", (_event, ctx) => publishCurrentFrame(ctx));
+  pi.on("resources_discover", (_event, ctx) => publishPresentation(ctx));
+  pi.on("input", (_event, ctx) => publishPresentation(ctx));
 
   pi.on("agent_start", (_event, ctx) => {
     stopAnimation();
