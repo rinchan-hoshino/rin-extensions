@@ -13,7 +13,9 @@
     "extensions": [
       "extensions/codex-usage.ts",
       "extensions/self-improve-reminder.ts",
-      "extensions/i18n.ts"
+      "extensions/i18n.ts",
+      "extensions/onebot.ts",
+      "extensions/lark.ts"
     ]
   },
   "scripts": {

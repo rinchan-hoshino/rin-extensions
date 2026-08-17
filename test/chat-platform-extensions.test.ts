@@ -18,6 +18,21 @@ import type {
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
+test("installed package declares both private Chat platform entries", () => {
+  const packageJson = JSON.parse(
+    fs.readFileSync(path.join(root, "package.json"), "utf8"),
+  ) as { pi?: { extensions?: string[] } };
+  const entries = packageJson.pi?.extensions || [];
+  assert.equal(
+    entries.filter((entry) => entry === "extensions/onebot.ts").length,
+    1,
+  );
+  assert.equal(
+    entries.filter((entry) => entry === "extensions/lark.ts").length,
+    1,
+  );
+});
+
 function platformInput(rootDir: string): ChatPlatformInput {
   return {
     agentDir: path.join(rootDir, "agent"),
