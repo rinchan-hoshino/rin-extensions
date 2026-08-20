@@ -25,7 +25,6 @@ import {
   resolveSelfImproveReminderConfig,
   extractSelfImproveReport,
   isAuthoritativeSelfImproveRun,
-  isSelfImproveDistillationPrompt,
   redactSensitiveText,
 } from "../extensions/self-improve-reminder.ts";
 import type {
@@ -35,8 +34,8 @@ import type {
 } from "../extensions/self-improve-reminder.ts";
 
 const TEST_SELF_IMPROVE_CHAT_KEY = "discord/test-bot:test-channel";
-const DISTILL_PROMPT =
-  "Follow /home/rin/.rin/docs/rin/docs/self-improve-distillation.md as the complete contract for one self-improve distillation pass over /home/rin/.rin/self_improve. Evidence scope: the conversation above.";
+const CURRENT_REVIEW_PROMPT =
+  "Review this conversation for information that should improve future behavior. Update the appropriate prompt or skill in /home/rin/.rin/self_improve when something durable is missing.";
 
 function createTestReminder(
   options: SelfImproveReminderOptions = {},
@@ -134,12 +133,12 @@ function asExtensionContext(value: unknown): ExtensionContext {
   return value as ExtensionContext;
 }
 
-function distillationContext(source = "builtin:self-improve"): TestContext {
+function distillationContext(
+  source = "builtin:self-improve",
+  prompt = CURRENT_REVIEW_PROMPT,
+): TestContext {
   return mockContext(
-    [
-      textMessage("user", DISTILL_PROMPT),
-      textMessage("assistant", "distilled result"),
-    ],
+    [textMessage("user", prompt), textMessage("assistant", "distilled result")],
     "/tmp/distillation-session.jsonl",
     source,
   );
@@ -184,20 +183,6 @@ test("is inert without local destination config and reads config outside the pac
   } finally {
     await rm(agentDir, { recursive: true, force: true });
   }
-});
-
-test("recognizes only the canonical self-improve distillation prompt", () => {
-  assert.equal(isSelfImproveDistillationPrompt(DISTILL_PROMPT), true);
-  assert.equal(
-    isSelfImproveDistillationPrompt(
-      "Please discuss self-improve-distillation.md",
-    ),
-    false,
-  );
-  assert.equal(
-    isSelfImproveDistillationPrompt("ordinary owner request"),
-    false,
-  );
 });
 
 test("requires authoritative built-in or scheduled-task provenance", () => {
@@ -253,25 +238,27 @@ test("requires authoritative built-in or scheduled-task provenance", () => {
   );
 });
 
-test("extracts the settled distillation final and ignores ordinary turns", () => {
+test("extracts the settled final independently of producer authentication", () => {
   const branch = [
     textMessage("user", "ordinary request"),
     textMessage("assistant", "ordinary result"),
-    textMessage("user", DISTILL_PROMPT),
+    textMessage("user", CURRENT_REVIEW_PROMPT),
     textMessage("assistant", "updated two skills"),
   ];
   assert.deepEqual(extractSelfImproveReport(branch), {
     entryId: "assistant-18",
     text: "updated two skills",
-    trigger: "",
   });
 
-  assert.equal(
+  assert.deepEqual(
     extractSelfImproveReport([
       textMessage("user", "ordinary request"),
       textMessage("assistant", "ordinary result"),
     ]),
-    null,
+    {
+      entryId: "assistant-15",
+      text: "ordinary result",
+    },
   );
 });
 
@@ -616,7 +603,7 @@ test("delivers from an agent_end snapshot after the settled context becomes stal
 
     let stale = false;
     const branch = [
-      textMessage("user", DISTILL_PROMPT),
+      textMessage("user", CURRENT_REVIEW_PROMPT),
       textMessage("assistant", "snapshot result"),
     ];
     const context = asExtensionContext({

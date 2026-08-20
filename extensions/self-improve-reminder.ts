@@ -34,7 +34,6 @@ interface MessageEntry {
 export interface SelfImproveReport {
   entryId: string;
   text: string;
-  trigger: string;
 }
 
 export interface RedactedText {
@@ -201,32 +200,7 @@ function messageEntry(entry: unknown): MessageEntry | null {
     : null;
 }
 
-export function isSelfImproveDistillationPrompt(text: unknown): boolean {
-  const normalized = String(text ?? "").trim();
-  return (
-    normalized.startsWith("Follow ") &&
-    normalized.includes(
-      "self-improve-distillation.md as the complete contract for one self-improve distillation pass over ",
-    ) &&
-    normalized.includes("Evidence scope:")
-  );
-}
-
-export function extractSelfImproveTrigger(text: unknown): string {
-  const match = String(text ?? "").match(
-    /Trigger context \([^)]*\):\s*("(?:\\.|[^"\\])*")\./,
-  );
-  if (!match) return "";
-  try {
-    const parsed = JSON.parse(match[1]);
-    return typeof parsed === "string" ? parsed.trim() : "";
-  } catch {
-    return "";
-  }
-}
-
 export function describeSelfImproveTrigger(
-  trigger: unknown,
   promptContext?: PromptContextLike,
 ): string {
   if (
@@ -236,19 +210,7 @@ export function describeSelfImproveTrigger(
     return "每日 24 小时整合";
   }
 
-  const normalized = String(trigger ?? "").trim();
-  if (normalized === "self_improve:session_shutdown_review") {
-    return "会话结束复盘";
-  }
-  if (normalized === "self_improve:periodic_review") {
-    return "达到周期复盘间隔";
-  }
-  if (normalized === "cron:builtin_self_improve_sleep_consolidation_daily") {
-    return "每日 24 小时整合";
-  }
-  if (normalized.startsWith("cron:")) return "计划任务完成后的复盘";
-  if (normalized) return "内置 self-improve 任务";
-  return "触发信息未提供";
+  return "内置 self-improve 任务";
 }
 
 export function formatSelfImproveDeliveryText(
@@ -308,7 +270,6 @@ export function extractSelfImproveReport(
   branch: unknown,
 ): SelfImproveReport | null {
   const entries = Array.isArray(branch) ? branch : [];
-  let assistantIndex = -1;
   let assistantEntry: { entry: MessageEntry; text: string } | undefined;
 
   for (let index = entries.length - 1; index >= 0; index -= 1) {
@@ -316,20 +277,10 @@ export function extractSelfImproveReport(
     if (entry?.message.role !== "assistant") continue;
     const text = textFromContent(entry.message.content);
     if (!text) continue;
-    assistantIndex = index;
     assistantEntry = { entry, text };
     break;
   }
   if (!assistantEntry) return null;
-
-  let latestUserText = "";
-  for (let index = assistantIndex - 1; index >= 0; index -= 1) {
-    const entry = messageEntry(entries[index]);
-    if (entry?.message.role !== "user") continue;
-    latestUserText = textFromContent(entry.message.content);
-    break;
-  }
-  if (!isSelfImproveDistillationPrompt(latestUserText)) return null;
 
   const fallbackId = createHash("sha256")
     .update(assistantEntry.text)
@@ -338,7 +289,6 @@ export function extractSelfImproveReport(
   return {
     entryId: String(assistantEntry.entry.id ?? fallbackId),
     text: assistantEntry.text,
-    trigger: extractSelfImproveTrigger(latestUserText),
   };
 }
 
@@ -506,7 +456,6 @@ export function createSelfImproveReminder(
           sessionFile:
             callSessionMethod(sessionManager, "getSessionFile") ?? "",
           triggerReason: describeSelfImproveTrigger(
-            report.trigger,
             readPromptContext(rinEvent, rinContext),
           ),
         };
